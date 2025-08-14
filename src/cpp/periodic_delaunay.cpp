@@ -196,5 +196,7 @@ EMSCRIPTEN_BINDINGS(my_module) {
         .function("setSteeringStrength", &ParticleSystem::setSteeringStrength)
         .function("setRepulsionStrength", &ParticleSystem::setRepulsionStrength)
         .function("setDamping", &ParticleSystem::setDamping)
-        .function("setSteeringEveryNFrames", &ParticleSystem::setSteeringEveryNFrames);
+        .function("setSteeringEveryNFrames", &ParticleSystem::setSteeringEveryNFrames)
+        .function("setMinSpeed", &ParticleSystem::setMinSpeed)
+        .function("setMaxSpeed", &ParticleSystem::setMaxSpeed);
 }

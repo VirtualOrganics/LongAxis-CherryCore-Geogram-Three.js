@@ -45,7 +45,9 @@ ParticleSystem::ParticleSystem()
       damping(0.98f),
       steeringStrength(0.20f),
       steeringEveryNFrames(10),
-      frameCounter(0) {}
+      frameCounter(0),
+      minSpeed(0.0f),
+      maxSpeed(2.0f) {}
 
 void ParticleSystem::initialize(std::size_t numParticles, float defaultRadius, unsigned int seed) {
     particles.clear();
@@ -133,12 +135,29 @@ void ParticleSystem::update(float dt) {
         }
     }
 
-    // Integrate and apply damping + periodic wrap
+    // Integrate and apply damping + periodic wrap; clamp speeds
     const float dampingFactor = std::pow(damping, dt * 60.0f); // roughly frame-rate independent
     for (std::size_t i = 0; i < n; ++i) {
         particles[i].vx *= dampingFactor;
         particles[i].vy *= dampingFactor;
         particles[i].vz *= dampingFactor;
+
+        // Clamp speed magnitude into [minSpeed, maxSpeed]
+        const float speed2 = particles[i].vx * particles[i].vx + particles[i].vy * particles[i].vy + particles[i].vz * particles[i].vz;
+        if (speed2 > 0.0f) {
+            const float speed = std::sqrt(speed2);
+            if (maxSpeed > 0.0f && speed > maxSpeed) {
+                const float s = maxSpeed / speed;
+                particles[i].vx *= s;
+                particles[i].vy *= s;
+                particles[i].vz *= s;
+            } else if (minSpeed > 0.0f && speed < minSpeed) {
+                const float s = minSpeed / speed;
+                particles[i].vx *= s;
+                particles[i].vy *= s;
+                particles[i].vz *= s;
+            }
+        }
 
         particles[i].x = wrap01(particles[i].x + particles[i].vx * dt);
         particles[i].y = wrap01(particles[i].y + particles[i].vy * dt);

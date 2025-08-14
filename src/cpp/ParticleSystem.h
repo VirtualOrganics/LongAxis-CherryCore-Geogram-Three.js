@@ -61,6 +61,8 @@ public:
     void setRepulsionStrength(float strength) { repulsionStrength = strength; }
     void setDamping(float d) { damping = d; }
     void setSteeringEveryNFrames(int n) { steeringEveryNFrames = (n <= 0 ? 1 : n); }
+    void setMinSpeed(float v) { minSpeed = v; }
+    void setMaxSpeed(float v) { maxSpeed = v; }
 
 private:
     // Helper to wrap a coordinate into [0,1)
@@ -90,6 +92,8 @@ private:
     float steeringStrength;    // Long-axis steering gain
     int steeringEveryNFrames;  // Throttle expensive Voronoi/PCA
     int frameCounter;          // Internal frame counter
+    float minSpeed;            // Clamp min speed after forces
+    float maxSpeed;            // Clamp max speed after forces
 
     std::vector<Particle> particles;
     std::vector<float> positions; // x,y,z packed for interop

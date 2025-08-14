@@ -16,6 +16,9 @@ const guiState = {
     repulsionStrength: 1.00,
     damping: 0.98,
     throttleFrames: 10,
+    minSpeed: 0.00,
+    maxSpeed: 2.00,
+    colorMode: 'axis',
 };
 
 function initThree() {
@@ -86,14 +89,24 @@ function updateInstances(positions, count, axisColors) {
         dummy.updateMatrix();
         instancedMesh.setMatrixAt(i, dummy.matrix);
         if (axisColors) {
-            // Map axis [-1,1] to RGB [0,1] with simple transform
-            const ax = axisColors[i * 3 + 0];
-            const ay = axisColors[i * 3 + 1];
-            const az = axisColors[i * 3 + 2];
-            const r = 0.5 * (ax + 1.0);
-            const g = 0.5 * (ay + 1.0);
-            const b = 0.5 * (az + 1.0);
-            instancedMesh.instanceColor.setXYZ(i, r, g, b);
+            if (guiState.colorMode === 'axis') {
+                const ax = axisColors[i * 3 + 0];
+                const ay = axisColors[i * 3 + 1];
+                const az = axisColors[i * 3 + 2];
+                const r = 0.5 * (ax + 1.0);
+                const g = 0.5 * (ay + 1.0);
+                const b = 0.5 * (az + 1.0);
+                instancedMesh.instanceColor.setXYZ(i, r, g, b);
+            } else {
+                const ax = axisColors[i * 3 + 0];
+                const ay = axisColors[i * 3 + 1];
+                const az = axisColors[i * 3 + 2];
+                const mag = Math.min(1.0, Math.sqrt(ax*ax + ay*ay + az*az));
+                const r = mag;
+                const g = 0.2 + 0.8 * (1.0 - mag);
+                const b = 1.0 - mag;
+                instancedMesh.instanceColor.setXYZ(i, r, g, b);
+            }
         }
     }
     instancedMesh.instanceMatrix.needsUpdate = true;
@@ -138,6 +151,8 @@ async function init() {
     ps.setRepulsionStrength(guiState.repulsionStrength);
     ps.setDamping(guiState.damping);
     ps.setSteeringEveryNFrames(guiState.throttleFrames);
+    ps.setMinSpeed(guiState.minSpeed);
+    ps.setMaxSpeed(guiState.maxSpeed);
 
     // Setup GUI
     if (window.lilgui) {
@@ -146,6 +161,9 @@ async function init() {
         gui.add(guiState, 'repulsionStrength', 0.0, 5.0, 0.01).onChange((v) => ps.setRepulsionStrength(v));
         gui.add(guiState, 'damping', 0.90, 1.00, 0.0005).onChange((v) => ps.setDamping(v));
         gui.add(guiState, 'throttleFrames', 1, 60, 1).onChange((v) => ps.setSteeringEveryNFrames(v));
+        gui.add(guiState, 'minSpeed', 0.0, 2.0, 0.01).onChange((v) => ps.setMinSpeed(v));
+        gui.add(guiState, 'maxSpeed', 0.5, 5.0, 0.01).onChange((v) => ps.setMaxSpeed(v));
+        gui.add(guiState, 'colorMode', ['axis', 'speed']);
     }
 
     requestAnimationFrame(animate);

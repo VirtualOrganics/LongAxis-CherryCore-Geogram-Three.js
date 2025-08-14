@@ -54,6 +54,9 @@ void ParticleSystem::initialize(std::size_t numParticles, float defaultRadius, u
     positions.clear();
     radii.clear();
     axes.clear();
+    facePositions.clear();
+    faceNormals.clear();
+    faceAxes.clear();
 
     particles.resize(numParticles);
     positions.resize(numParticles * 3u);
@@ -186,6 +189,10 @@ float* ParticleSystem::getAxisBufferPtr() {
     return axes.empty() ? nullptr : axes.data();
 }
 
+float* ParticleSystem::getFacePositionBufferPtr() { return facePositions.empty() ? nullptr : facePositions.data(); }
+float* ParticleSystem::getFaceNormalBufferPtr() { return faceNormals.empty() ? nullptr : faceNormals.data(); }
+float* ParticleSystem::getFaceAxisBufferPtr() { return faceAxes.empty() ? nullptr : faceAxes.data(); }
+
 void ParticleSystem::applyVoronoiSteering(float dt) {
     const std::size_t n = particles.size();
     if (n < 4) return; // Need tetrahedra
@@ -311,6 +318,56 @@ void ParticleSystem::applyVoronoiSteering(float dt) {
         axes[i * 3u + 0u] = axis.x();
         axes[i * 3u + 1u] = axis.y();
         axes[i * 3u + 2u] = axis.z();
+    }
+
+    // Optional: very lightweight face triangulation per particle
+    // We approximate faces by creating a star from the mean of its circumcenters
+    facePositions.clear();
+    faceNormals.clear();
+    faceAxes.clear();
+    facePositions.reserve(n * 3 * 6); // rough reserve
+    faceNormals.reserve(n * 3 * 6);
+    faceAxes.reserve(n * 3 * 6);
+
+    for (std::size_t i = 0; i < n; ++i) {
+        const auto& centers = cellCenters[i];
+        if (centers.size() < 3) continue;
+        // Compute center and normal by PCA again (largest axis gives orientation; use second/third for plane)
+        Eigen::Vector3f mean(0,0,0);
+        for (const auto& c : centers) mean += c;
+        mean /= float(centers.size());
+
+        // Compute a rough normal as average of triangle normals to mean
+        Eigen::Vector3f normal(0,0,0);
+        for (size_t k = 0; k + 2 < centers.size(); ++k) {
+            Eigen::Vector3f a = centers[k] - mean;
+            Eigen::Vector3f b = centers[k+1] - mean;
+            normal += a.cross(b);
+        }
+        if (normal.norm() == 0.0f) normal = Eigen::Vector3f(0,0,1);
+        normal.normalize();
+
+        // Triangle fan around mean
+        for (size_t k = 0; k < centers.size(); ++k) {
+            const Eigen::Vector3f& c0 = centers[k];
+            const Eigen::Vector3f& c1 = centers[(k+1) % centers.size()];
+            // push triangle (mean, c0, c1)
+            const float ax = axes[i * 3u + 0u];
+            const float ay = axes[i * 3u + 1u];
+            const float az = axes[i * 3u + 2u];
+            // mean
+            facePositions.insert(facePositions.end(), { mean.x(), mean.y(), mean.z() });
+            faceNormals.insert(faceNormals.end(), { normal.x(), normal.y(), normal.z() });
+            faceAxes.insert(faceAxes.end(), { ax, ay, az });
+            // c0
+            facePositions.insert(facePositions.end(), { c0.x(), c0.y(), c0.z() });
+            faceNormals.insert(faceNormals.end(), { normal.x(), normal.y(), normal.z() });
+            faceAxes.insert(faceAxes.end(), { ax, ay, az });
+            // c1
+            facePositions.insert(facePositions.end(), { c1.x(), c1.y(), c1.z() });
+            faceNormals.insert(faceNormals.end(), { normal.x(), normal.y(), normal.z() });
+            faceAxes.insert(faceAxes.end(), { ax, ay, az });
+        }
     }
 }
 

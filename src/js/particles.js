@@ -5,6 +5,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 let scene, camera, renderer, controls;
 let instancedMesh, dummy;
+let facesMesh, facesGeom, facesMat;
 let Module, ps;
 let lastTime = 0;
 
@@ -139,6 +140,78 @@ function animate(nowMs) {
                 if (axOff) axisColors = getPositionsView(axOff, n);
             }
             updateInstances(positions, n, axisColors);
+        }
+
+        // Update Voronoi faces (if any)
+        if (ps.getFaceVertexCount) {
+            const vcount = ps.getFaceVertexCount();
+            if (vcount > 0) {
+                const posOff = ps.getFacePositionBufferByteOffset();
+                const norOff = ps.getFaceNormalBufferByteOffset();
+                const axOff  = ps.getFaceAxisBufferByteOffset();
+                const pos = new Float32Array(Module.HEAPF32.buffer, posOff, vcount * 3);
+                const nrm = new Float32Array(Module.HEAPF32.buffer, norOff, vcount * 3);
+                const pax = new Float32Array(Module.HEAPF32.buffer, axOff, vcount * 3);
+
+                if (!facesGeom) {
+                    facesGeom = new THREE.BufferGeometry();
+                    const vert = new THREE.Float32BufferAttribute(pos, 3);
+                    const norm = new THREE.Float32BufferAttribute(nrm, 3);
+                    const axis = new THREE.Float32BufferAttribute(pax, 3);
+                    facesGeom.setAttribute('position', vert);
+                    facesGeom.setAttribute('normal', norm);
+                    facesGeom.setAttribute('particleAxis', axis);
+
+                    facesMat = new THREE.ShaderMaterial({
+                        transparent: true,
+                        depthWrite: false,
+                        uniforms: { uOpacity: { value: 0.35 } },
+                        vertexShader: `
+                            attribute vec3 particleAxis;
+                            varying vec3 vNormal;
+                            varying vec3 vAxis;
+                            void main(){
+                                vNormal = normalize(normalMatrix * normal);
+                                vAxis = particleAxis;
+                                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                            }
+                        `,
+                        fragmentShader: `
+                            varying vec3 vNormal;
+                            varying vec3 vAxis;
+                            uniform float uOpacity;
+                            float bayer(vec2 p){
+                                int x = int(mod(p.x,4.0));
+                                int y = int(mod(p.y,4.0));
+                                int idx = y*4 + x;
+                                float t[16];
+                                t[0]=0.0; t[1]=8.0; t[2]=2.0; t[3]=10.0;
+                                t[4]=12.0; t[5]=4.0; t[6]=14.0; t[7]=6.0;
+                                t[8]=3.0; t[9]=11.0; t[10]=1.0; t[11]=9.0;
+                                t[12]=15.0; t[13]=7.0; t[14]=13.0; t[15]=5.0;
+                                return t[idx]/16.0;
+                            }
+                            void main(){
+                                float d = bayer(gl_FragCoord.xy);
+                                if(d > uOpacity) discard;
+                                float light = max(0.0, dot(normalize(vNormal), normalize(vec3(0.5,1.0,0.2))));
+                                vec3 col = abs(vAxis);
+                                gl_FragColor = vec4(col*(0.35+0.65*light), 1.0);
+                            }
+                        `
+                    });
+                    facesMesh = new THREE.Mesh(facesGeom, facesMat);
+                    scene.add(facesMesh);
+                } else {
+                    facesGeom.attributes.position.array = pos;
+                    facesGeom.attributes.normal.array = nrm;
+                    facesGeom.attributes.particleAxis.array = pax;
+                    facesGeom.attributes.position.needsUpdate = true;
+                    facesGeom.attributes.normal.needsUpdate = true;
+                    facesGeom.attributes.particleAxis.needsUpdate = true;
+                    facesGeom.computeBoundingSphere();
+                }
+            }
         }
     }
 

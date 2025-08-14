@@ -56,6 +56,13 @@ public:
     // Raw pointer to normalized steering axis per particle (x,y,z per particle)
     float* getAxisBufferPtr();
 
+    // Voronoi face buffers (triangulated)
+    // Returns total vertex count in the face buffers
+    std::size_t getFaceVertexCount() const { return facePositions.size() / 3u; }
+    float* getFacePositionBufferPtr();
+    float* getFaceNormalBufferPtr();
+    float* getFaceAxisBufferPtr();
+
     // Parameter setters for live tuning from JS
     void setSteeringStrength(float strength) { steeringStrength = strength; }
     void setRepulsionStrength(float strength) { repulsionStrength = strength; }
@@ -99,6 +106,11 @@ private:
     std::vector<float> positions; // x,y,z packed for interop
     std::vector<float> radii;     // radii packed for interop
     std::vector<float> axes;      // normalized steering axis per particle (x,y,z)
+
+    // Triangulated Voronoi faces (positions, normals, and owner-particle axis per vertex)
+    std::vector<float> facePositions;
+    std::vector<float> faceNormals;
+    std::vector<float> faceAxes;
 
     // Compute Voronoi-based steering using PCA of each cell's circumcenter cloud
     void applyVoronoiSteering(float dt);

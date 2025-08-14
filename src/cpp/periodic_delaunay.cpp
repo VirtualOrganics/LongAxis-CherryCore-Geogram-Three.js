@@ -193,6 +193,18 @@ EMSCRIPTEN_BINDINGS(my_module) {
         .function("getAxisBufferByteOffset", optional_override([](ParticleSystem& self) {
             return static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(self.getAxisBufferPtr()));
         }))
+        .function("getFaceVertexCount", optional_override([](const ParticleSystem& self) {
+            return static_cast<uint32_t>(self.getFaceVertexCount());
+        }))
+        .function("getFacePositionBufferByteOffset", optional_override([](ParticleSystem& self) {
+            return static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(self.getFacePositionBufferPtr()));
+        }))
+        .function("getFaceNormalBufferByteOffset", optional_override([](ParticleSystem& self) {
+            return static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(self.getFaceNormalBufferPtr()));
+        }))
+        .function("getFaceAxisBufferByteOffset", optional_override([](ParticleSystem& self) {
+            return static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(self.getFaceAxisBufferPtr()));
+        }))
         .function("setSteeringStrength", &ParticleSystem::setSteeringStrength)
         .function("setRepulsionStrength", &ParticleSystem::setRepulsionStrength)
         .function("setDamping", &ParticleSystem::setDamping)

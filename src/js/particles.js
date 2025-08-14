@@ -251,6 +251,13 @@ function animate(nowMs) {
             } else if (axisLines) {
                 axisLines.visible = false;
             }
+
+            // Update Voronoi mesh using DelaunayComputation (throttled)
+            voronoiFrameCounter++;
+            if (voronoiFrameCounter >= guiState.voronoiUpdateFrames) {
+                voronoiFrameCounter = 0;
+                updateVoronoiMesh(positions, n);
+            }
         }
 
         // Update Voronoi faces only if enabled
@@ -326,13 +333,6 @@ function animate(nowMs) {
             }
         } else if (facesMesh) {
             facesMesh.visible = false;
-        }
-
-        // Update Voronoi mesh using DelaunayComputation (throttled)
-        voronoiFrameCounter++;
-        if (voronoiFrameCounter >= guiState.voronoiUpdateFrames) {
-            voronoiFrameCounter = 0;
-            updateVoronoiMesh(positions, n);
         }
     }
 

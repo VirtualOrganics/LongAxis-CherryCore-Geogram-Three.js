@@ -6,6 +6,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 let scene, camera, renderer, controls;
 let instancedMesh, dummy;
 let facesMesh, facesGeom, facesMat;
+let axisLines, axisGeom, axisMat;
 let Module, ps;
 let lastTime = 0;
 
@@ -19,7 +20,10 @@ const guiState = {
     throttleFrames: 10,
     minSpeed: 0.00,
     maxSpeed: 2.00,
-    colorMode: 'axis',
+    colorMode: 'none', // 'none' | 'axis' | 'speed'
+    showAxis: true,
+    axisLength: 0.08,
+    axisOpacity: 1.0,
     showFaces: false,
     faceOpacity: 0.35,
 };
@@ -71,6 +75,13 @@ function initThree() {
     instancedMesh.instanceColor.needsUpdate = true;
     scene.add(instancedMesh);
 
+    // Axis line segments (2 vertices per particle)
+    axisGeom = new THREE.BufferGeometry();
+    axisGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(NUM_PARTICLES * 2 * 3), 3));
+    axisMat = new THREE.LineBasicMaterial({ color: 0xff66ff, transparent: true, opacity: guiState.axisOpacity });
+    axisLines = new THREE.LineSegments(axisGeom, axisMat);
+    scene.add(axisLines);
+
     dummy = new THREE.Object3D();
 
     window.addEventListener('resize', onResize);
@@ -98,7 +109,7 @@ function updateInstances(positions, count, axisColors) {
         dummy.scale.set(1, 1, 1);
         dummy.updateMatrix();
         instancedMesh.setMatrixAt(i, dummy.matrix);
-        if (axisColors) {
+        if (axisColors && guiState.colorMode !== 'none') {
             if (guiState.colorMode === 'axis') {
                 const ax = axisColors[i * 3 + 0];
                 const ay = axisColors[i * 3 + 1];
@@ -120,7 +131,7 @@ function updateInstances(positions, count, axisColors) {
         }
     }
     instancedMesh.instanceMatrix.needsUpdate = true;
-    if (axisColors && instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
+    if (axisColors && guiState.colorMode !== 'none' && instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
 }
 
 function animate(nowMs) {
@@ -142,6 +153,31 @@ function animate(nowMs) {
                 if (axOff) axisColors = getPositionsView(axOff, n);
             }
             updateInstances(positions, n, axisColors);
+
+            // Update axis lines
+            if (guiState.showAxis && axisColors) {
+                const arr = axisGeom.attributes.position.array;
+                let p = 0;
+                for (let i = 0; i < n; i++) {
+                    const x = positions[i*3+0];
+                    const y = positions[i*3+1];
+                    const z = positions[i*3+2];
+                    const ax = axisColors[i*3+0];
+                    const ay = axisColors[i*3+1];
+                    const az = axisColors[i*3+2];
+                    const ex = x + ax * guiState.axisLength;
+                    const ey = y + ay * guiState.axisLength;
+                    const ez = z + az * guiState.axisLength;
+                    arr[p++] = x; arr[p++] = y; arr[p++] = z;
+                    arr[p++] = ex; arr[p++] = ey; arr[p++] = ez;
+                }
+                axisGeom.setDrawRange(0, n * 2);
+                axisGeom.attributes.position.needsUpdate = true;
+                axisLines.visible = true;
+                axisMat.opacity = guiState.axisOpacity;
+            } else if (axisLines) {
+                axisLines.visible = false;
+            }
         }
 
         // Update Voronoi faces only if enabled
@@ -248,7 +284,14 @@ async function init() {
         gui.add(guiState, 'throttleFrames', 1, 60, 1).onChange((v) => ps.setSteeringEveryNFrames(v));
         gui.add(guiState, 'minSpeed', 0.0, 2.0, 0.01).onChange((v) => ps.setMinSpeed(v));
         gui.add(guiState, 'maxSpeed', 0.5, 5.0, 0.01).onChange((v) => ps.setMaxSpeed(v));
-        gui.add(guiState, 'colorMode', ['axis', 'speed']);
+        gui.add(guiState, 'colorMode', ['none', 'axis', 'speed']);
+        const axisFolder = gui.addFolder('Axis');
+        axisFolder.add(guiState, 'showAxis');
+        axisFolder.add(guiState, 'axisLength', 0.01, 0.2, 0.005);
+        axisFolder.add(guiState, 'axisOpacity', 0.1, 1.0, 0.05);
+        const faceFolder = gui.addFolder('Faces');
+        faceFolder.add(guiState, 'showFaces');
+        faceFolder.add(guiState, 'faceOpacity', 0.05, 0.8, 0.05);
     }
 
     requestAnimationFrame(animate);

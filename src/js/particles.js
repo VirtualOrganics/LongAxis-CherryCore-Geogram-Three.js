@@ -11,6 +11,12 @@ let lastTime = 0;
 const NUM_PARTICLES = 300;    // Adjust freely
 const DEFAULT_RADIUS = 0.015; // Visual + physical radius
 const SEED = 42;
+const guiState = {
+    steeringStrength: 0.20,
+    repulsionStrength: 1.00,
+    damping: 0.98,
+    throttleFrames: 10,
+};
 
 function initThree() {
     scene = new THREE.Scene();
@@ -52,10 +58,9 @@ function onResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-function getPositionsView(ptr, count) {
-    // ptr is a byte offset; use HEAPF32.subarray with element offset
-    const floatOffset = ptr >>> 2; // divide by 4
-    return Module.HEAPF32.subarray(floatOffset, floatOffset + count * 3);
+function getPositionsView(byteOffset, count) {
+    // Create a view into the wasm heap without copying
+    return new Float32Array(Module.HEAPF32.buffer, byteOffset, count * 3);
 }
 
 function updateInstances(positions, count) {
@@ -82,10 +87,10 @@ function animate(nowMs) {
 
     if (ps) {
         ps.update(dt);
-        const ptr = ps.getPositionBufferPtr();
+        const byteOffset = ps.getPositionBufferByteOffset();
         const n = ps.getParticleCount();
-        if (ptr && n > 0) {
-            const positions = getPositionsView(ptr, n);
+        if (byteOffset && n > 0) {
+            const positions = getPositionsView(byteOffset, n);
             updateInstances(positions, n);
         }
     }
@@ -100,6 +105,21 @@ async function init() {
     Module = await window.PeriodicDelaunayModule();
     ps = new Module.ParticleSystem();
     ps.initialize(NUM_PARTICLES, DEFAULT_RADIUS, SEED);
+
+    // Apply initial params
+    ps.setSteeringStrength(guiState.steeringStrength);
+    ps.setRepulsionStrength(guiState.repulsionStrength);
+    ps.setDamping(guiState.damping);
+    ps.setSteeringEveryNFrames(guiState.throttleFrames);
+
+    // Setup GUI
+    if (window.lilgui) {
+        const gui = new window.lilgui({ title: 'Cherry Core Controls' });
+        gui.add(guiState, 'steeringStrength', 0.0, 2.0, 0.01).onChange((v) => ps.setSteeringStrength(v));
+        gui.add(guiState, 'repulsionStrength', 0.0, 5.0, 0.01).onChange((v) => ps.setRepulsionStrength(v));
+        gui.add(guiState, 'damping', 0.90, 1.00, 0.0005).onChange((v) => ps.setDamping(v));
+        gui.add(guiState, 'throttleFrames', 1, 60, 1).onChange((v) => ps.setSteeringEveryNFrames(v));
+    }
 
     requestAnimationFrame(animate);
 }

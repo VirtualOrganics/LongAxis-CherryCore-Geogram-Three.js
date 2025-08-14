@@ -16,7 +16,11 @@
         #hud { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.4); padding: 8px 10px; border-radius: 6px; }
         a { color: #9cf; }
     </style>
-    <script src="dist/periodic_delaunay.js"></script>
+    <script src="dist/periodic_delaunay.js?v=2"></script>
+    <script type="module">
+        import GUI from 'https://cdn.jsdelivr.net/npm/lil-gui@0.18/+esm';
+        window.lilgui = GUI; // expose for particles.js
+    </script>
     <script type="module" src="src/js/particles.js"></script>
 </head>
 <body>

@@ -6,6 +6,8 @@
 #include <vector>
 #include <set>
 #include <algorithm>
+#include "ParticleSystem.h"
+#include <cstdint>
 
 // Global initialization flag
 static bool g_geogram_initialized = false;
@@ -170,4 +172,26 @@ emscripten::val compute_periodic_delaunay_js(emscripten::val points_array, int n
 // --- 7. Embind module ---
 EMSCRIPTEN_BINDINGS(my_module) {
     emscripten::function("compute_delaunay", &compute_periodic_delaunay_js);
-} 
+
+    using emscripten::optional_override;
+
+    // Minimal embind for ParticleSystem to enable Step 2 integration
+    emscripten::class_<ParticleSystem>("ParticleSystem")
+        .constructor<>()
+        .function("initialize", &ParticleSystem::initialize)
+        .function("update", &ParticleSystem::update)
+        .function("getParticleCount", optional_override([](const ParticleSystem& self) {
+            return static_cast<uint32_t>(self.getParticleCount());
+        }))
+        // New byte-offset accessors to avoid raw pointer bindings in JS
+        .function("getPositionBufferByteOffset", optional_override([](ParticleSystem& self) {
+            return static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(self.getPositionBufferPtr()));
+        }))
+        .function("getRadiusBufferByteOffset", optional_override([](ParticleSystem& self) {
+            return static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(self.getRadiusBufferPtr()));
+        }))
+        .function("setSteeringStrength", &ParticleSystem::setSteeringStrength)
+        .function("setRepulsionStrength", &ParticleSystem::setRepulsionStrength)
+        .function("setDamping", &ParticleSystem::setDamping)
+        .function("setSteeringEveryNFrames", &ParticleSystem::setSteeringEveryNFrames);
+}

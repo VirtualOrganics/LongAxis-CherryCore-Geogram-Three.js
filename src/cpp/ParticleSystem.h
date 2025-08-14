@@ -53,6 +53,12 @@ public:
     // Raw pointer to radii array (float per particle)
     float* getRadiusBufferPtr();
 
+    // Parameter setters for live tuning from JS
+    void setSteeringStrength(float strength) { steeringStrength = strength; }
+    void setRepulsionStrength(float strength) { repulsionStrength = strength; }
+    void setDamping(float d) { damping = d; }
+    void setSteeringEveryNFrames(int n) { steeringEveryNFrames = (n <= 0 ? 1 : n); }
+
 private:
     // Helper to wrap a coordinate into [0,1)
     static inline float wrap01(float v) {

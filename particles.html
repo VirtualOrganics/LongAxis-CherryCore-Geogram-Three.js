@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>Particles - Cherry Core Repulsion</title>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/"
+        }
+    }
+    </script>
+    <style>
+        html, body { margin: 0; height: 100%; background: #111; color: #ddd; font-family: system-ui, Arial, sans-serif; }
+        #hud { position: absolute; top: 10px; left: 10px; background: rgba(0,0,0,0.4); padding: 8px 10px; border-radius: 6px; }
+        a { color: #9cf; }
+    </style>
+    <script src="dist/periodic_delaunay.js"></script>
+    <script type="module" src="src/js/particles.js"></script>
+</head>
+<body>
+    <div id="hud">Cherry Core Repulsion • InstancedMesh • WASM</div>
+</body>
+<!--
+    How to run locally:
+    1) Build: ./build.sh
+    2) Serve: python3 -m http.server 8080
+    3) Open: http://localhost:8080/particles.html
+-->
+</html>
+
+

@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Periodic Mode</title>
+    <style>
+        body { font-family: monospace; margin: 20px; }
+        button { margin: 10px; padding: 5px 10px; }
+        pre { background: #f0f0f0; padding: 10px; overflow: auto; max-height: 400px; }
+        .error { color: red; }
+        .warning { color: orange; }
+        .success { color: green; }
+    </style>
+</head>
+<body>
+    <h1>Debug Periodic Delaunay</h1>
+    <button id="testNonPeriodic">Test Non-Periodic</button>
+    <button id="testPeriodic">Test Periodic</button>
+    <button id="clearOutput">Clear Output</button>
+    
+    <h2>Output:</h2>
+    <pre id="output"></pre>
+    
+    <script src="dist/periodic_delaunay.js"></script>
+    <script>
+        const output = document.getElementById('output');
+        
+        function log(message, className = '') {
+            const span = document.createElement('span');
+            span.textContent = message + '\n';
+            if (className) span.className = className;
+            output.appendChild(span);
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        async function runTest(isPeriodic) {
+            log(`\n=== Testing ${isPeriodic ? 'PERIODIC' : 'NON-PERIODIC'} mode ===`);
+            
+            try {
+                const Module = await window.PeriodicDelaunayModule();
+                log('Module loaded successfully', 'success');
+                
+                // Simple test points
+                const points = [
+                    [0.1, 0.1, 0.1],
+                    [0.9, 0.1, 0.1],
+                    [0.1, 0.9, 0.1],
+                    [0.1, 0.1, 0.9],
+                    [0.5, 0.5, 0.5]
+                ];
+                
+                log(`Testing with ${points.length} points:`);
+                points.forEach((p, i) => {
+                    log(`  Point ${i}: [${p[0].toFixed(2)}, ${p[1].toFixed(2)}, ${p[2].toFixed(2)}]`);
+                });
+                
+                const flatPoints = new Float64Array(points.flat());
+                
+                // Call WASM
+                log(`\nCalling Module.compute_delaunay(points, ${points.length}, ${isPeriodic})`);
+                const result = Module.compute_delaunay(flatPoints, points.length, isPeriodic);
+                
+                log(`\nResult: ${result ? `Array with ${result.length} tetrahedra` : 'null/undefined'}`, 
+                    result && result.length > 0 ? 'success' : 'error');
+                
+                if (result && result.length > 0) {
+                    // Analyze results
+                    log('\nTetrahedra details:');
+                    let validCount = 0;
+                    let invalidCount = 0;
+                    
+                    result.forEach((tet, i) => {
+                        const v0 = tet[0], v1 = tet[1], v2 = tet[2], v3 = tet[3];
+                        const isValid = v0 >= 0 && v0 < points.length &&
+                                      v1 >= 0 && v1 < points.length &&
+                                      v2 >= 0 && v2 < points.length &&
+                                      v3 >= 0 && v3 < points.length;
+                        
+                        if (isValid) {
+                            validCount++;
+                            if (i < 5) { // Show first 5
+                                log(`  Tet ${i}: [${v0}, ${v1}, ${v2}, ${v3}]`);
+                            }
+                        } else {
+                            invalidCount++;
+                            log(`  Tet ${i}: [${v0}, ${v1}, ${v2}, ${v3}] - INVALID INDICES!`, 'error');
+                        }
+                    });
+                    
+                    if (result.length > 5) {
+                        log(`  ... and ${result.length - 5} more`);
+                    }
+                    
+                    log(`\nSummary: ${validCount} valid, ${invalidCount} invalid tetrahedra`, 
+                        invalidCount > 0 ? 'warning' : 'success');
+                    
+                    // Check for duplicate tetrahedra
+                    const tetSet = new Set();
+                    let duplicates = 0;
+                    for (const tet of result) {
+                        const key = [...tet].sort().join(',');
+                        if (tetSet.has(key)) {
+                            duplicates++;
+                        } else {
+                            tetSet.add(key);
+                        }
+                    }
+                    if (duplicates > 0) {
+                        log(`Found ${duplicates} duplicate tetrahedra!`, 'warning');
+                    }
+                } else {
+                    log('No tetrahedra returned!', 'error');
+                }
+                
+            } catch (error) {
+                log(`ERROR: ${error.message}`, 'error');
+                console.error(error);
+            }
+        }
+        
+        document.getElementById('testNonPeriodic').addEventListener('click', () => runTest(false));
+        document.getElementById('testPeriodic').addEventListener('click', () => runTest(true));
+        document.getElementById('clearOutput').addEventListener('click', () => {
+            output.innerHTML = '';
+        });
+        
+        // Run both tests on load
+        window.addEventListener('load', async () => {
+            await runTest(false);
+            await runTest(true);
+        });
+    </script>
+</body>
+</html> 

@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Periodic Delaunay-Voronoi - Three.js Visualization</title>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/",
+            "poisson-disk-sampling": "https://esm.sh/poisson-disk-sampling@2.3.0"
+        }
+    }
+    </script>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            width: 320px;
+            transition: all 0.3s ease;
+        }
+        #controls-content {
+            max-height: calc(100vh - 40px);
+            overflow-y: auto;
+        }
+        .control-group {
+            margin: 8px 0;
+        }
+        .control-row {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .control-row .control-group {
+            flex: 1;
+            margin: 0;
+        }
+        label {
+            display: inline-block;
+            width: 110px;
+            font-size: 13px;
+        }
+        .control-row label {
+            width: 80px;
+        }
+        input[type="number"] {
+            width: 55px;
+        }
+        input[type="color"] {
+            width: 30px;
+            height: 25px;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button {
+            margin: 5px 0;
+            padding: 5px 10px;
+            width: 100%;
+        }
+        .section-header {
+            font-weight: bold;
+            margin: 15px 0 8px 0;
+            padding: 8px 12px;
+            background: #f8f9fa;
+            border-radius: 4px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        #controls-toggle {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        #controls-toggle:hover {
+            background: #0056b3;
+        }
+        #controls.hidden {
+            width: auto;
+            padding: 12px 16px;
+        }
+        #controls.hidden .section-header {
+            margin: 0;
+        }
+        #controls.hidden #controls-toggle {
+            padding: 8px 16px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.95);
+            color: #333;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .status { 
+            font-size: 12px; 
+            margin-top: 10px;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+
+    
+    <div id="controls" class="controls-container">
+        <button id="controls-toggle" title="Hide Controls">hide</button>
+        <div id="controls-content">
+            <div class="section" id="main-controls">
+                <div class="section-header">Main Controls</div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Points:</label>
+                        <input type="number" id="numPoints" value="250" min="4" max="2500" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label>Min Dist:</label>
+                        <input type="number" id="minDistance" value="0.05" min="0.01" max="0.2" step="0.01">
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Motion:</label>
+                        <input type="range" id="motionWander" value="0" min="0" max="0.1" step="0.001" class="slider">
+                    </div>
+                    <div class="control-group">
+                        <label>Speed:</label>
+                        <input type="range" id="motionSpeed" value="0" min="0" max="0.01" step="0.0001" class="slider">
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Live Update:</label>
+                        <input type="checkbox" id="liveUpdate">
+                    </div>
+                    <div class="control-group">
+                        <label>Update Step:</label>
+                        <input type="number" id="updateFrequency" value="10" min="1" max="60" step="1">
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Periodic:</label>
+                        <input type="checkbox" id="periodicMode">
+                    </div>
+                    <div class="control-group">
+                        <label>Ghost Cells:</label>
+                        <input type="checkbox" id="showGhostCells">
+                    </div>
+                    <div class="control-group">
+                        <label>MIC:</label>
+                        <input type="checkbox" id="useMIC">
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Background:</label>
+                        <input type="color" id="backgroundColor" value="#AAAAAA">
+                    </div>
+                    <div class="control-group">
+                        <label>Boundary:</label>
+                        <input type="checkbox" id="showBoundary" checked>
+                    </div>
+                    <div class="control-group">
+                        <label>Poisson:</label>
+                        <input type="checkbox" id="poissonSampling" checked>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="section" id="visualization-controls">
+                <div class="section-header">Delaunay Triangles / Tetrahedra</div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Vertices:</label>
+                        <input type="checkbox" id="showVertices" checked>
+                    </div>
+                    <div class="control-group">
+                        <label>Delaunay:</label>
+                        <input type="checkbox" id="showDelaunay" checked>
+                    </div>
+                    <div class="control-group">
+                        <label>Tetrahedra:</label>
+                        <input type="checkbox" id="showTetrahedra" checked>
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Point Size:</label>
+                        <input type="number" id="delaunaySize" value="0.005" min="0.005" max="0.05" step="0.005">
+                    </div>
+                    <div class="control-group">
+                        <label>Color:</label>
+                        <input type="color" id="vertexColor" value="#000000">
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Edge Width:</label>
+                        <input type="number" id="delaunayEdgeWidth" value="2" min="1" max="5" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label>Color:</label>
+                        <input type="color" id="delaunayEdgeColor" value="#808080">
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Tetra Color:</label>
+                        <input type="color" id="tetraColor" value="#808080">
+                    </div>
+                    <div class="control-group">
+                        <label>Opacity:</label>
+                        <input type="number" id="tetraOpacity" value="0.025" min="0.0" max="1.0" step="0.01">
+                    </div>
+                </div>
+                
+                <div class="section-header">Voronoi Diagrams</div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Voronoi:</label>
+                        <input type="checkbox" id="showVoronoi" checked>
+                    </div>
+                    <div class="control-group">
+                        <label>Faces:</label>
+                        <input type="checkbox" id="showVoronoiFaces" checked>
+                    </div>
+                    <div class="control-group">
+                        <label>Random:</label>
+                        <input type="checkbox" id="randomVoronoiColors" checked>
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Point Size:</label>
+                        <input type="number" id="voronoiSize" value="0.0025" min="0.0005" max="0.05" step="0.0005">
+                    </div>
+                    <div class="control-group">
+                        <label>Color:</label>
+                        <input type="color" id="voronoiVertexColor" value="#CCCCCC">
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Edge Width:</label>
+                        <input type="number" id="voronoiEdgeWidth" value="3" min="1" max="5" step="1">
+                    </div>
+                    <div class="control-group">
+                        <label>Color:</label>
+                        <input type="color" id="voronoiEdgeColor" value="#000000">
+                    </div>
+                </div>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label>Face Color:</label>
+                        <input type="color" id="voronoiFaceColor" value="#32CD32">
+                    </div>
+                    <div class="control-group">
+                        <label>Opacity:</label>
+                        <input type="number" id="voronoiFaceOpacity" value="0.25" min="0.0" max="1.0" step="0.01">
+                    </div>
+                </div>
+                
+                <button id="regenerate">Generate New Points</button>
+                <button id="recompute">Recompute Triangulation</button>
+                <div id="status" class="status"></div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="dist/periodic_delaunay.js"></script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { ConvexGeometry } from 'three/addons/geometries/ConvexGeometry.js';
+        import { Line2 } from 'three/addons/lines/Line2.js';
+        import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
+        import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
+        import { DelaunayComputation } from './src/js/DelaunayComputation.js';
+        import PoissonDiskSampling from 'poisson-disk-sampling';
+        
+        let scene, camera, renderer, controls;
+        let verticesGroup, delaunayGroup, voronoiGroup, tetrahedraGroup, boundaryGroup, voronoiFacesGroup;
+        let mainCellGroup, ghostCellsGroup; // NEW: Groups for ghost cell tiling
+        let Module;
+        let currentPoints = [];
+        let computation = null;
+        let velocities = [];
+        let frameCount = 0;
+        
+        // Initialize Three.js
+        function initThree() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xAAAAAA);
+            
+            camera = new THREE.PerspectiveCamera(
+                75, window.innerWidth / window.innerHeight, 0.1, 1000
+            );
+            camera.position.set(1.5, 1.5, 1.5);
+            camera.lookAt(0.5, 0.5, 0.5);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+            
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0.5, 0.5, 0.5);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
+            directionalLight.position.set(1, 1, 1);
+            scene.add(directionalLight);
+            
+            // Groups
+            verticesGroup = new THREE.Group();
+            delaunayGroup = new THREE.Group();
+            voronoiGroup = new THREE.Group();
+            tetrahedraGroup = new THREE.Group();
+            boundaryGroup = new THREE.Group();
+            voronoiFacesGroup = new THREE.Group();
+            
+            // NEW: Ghost cell groups
+            mainCellGroup = new THREE.Group();
+            ghostCellsGroup = new THREE.Group();
+            
+            // Add main cell groups to the main cell container
+            mainCellGroup.add(verticesGroup);
+            mainCellGroup.add(delaunayGroup);
+            mainCellGroup.add(voronoiGroup);
+            mainCellGroup.add(tetrahedraGroup);
+            mainCellGroup.add(voronoiFacesGroup);
+            
+            scene.add(mainCellGroup);
+            scene.add(boundaryGroup); // Boundary stays separate
+            scene.add(ghostCellsGroup);
+            
+            // Create boundary box
+            createBoundaryBox();
+            
+            // Handle resize
+            window.addEventListener('resize', onWindowResize);
+        }
+        
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            // Update resolution for LineMaterial
+            delaunayGroup.children.forEach(child => {
+                if (child.material && child.material.isLineMaterial) {
+                    child.material.resolution.set(window.innerWidth, window.innerHeight);
+                }
+            });
+            voronoiGroup.children.forEach(child => {
+                if (child.material && child.material.isLineMaterial) {
+                    child.material.resolution.set(window.innerWidth, window.innerHeight);
+                }
+            });
+        }
+        
+        function createBoundaryBox() {
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const edges = new THREE.EdgesGeometry(geometry);
+            const line = new THREE.LineSegments(
+                edges,
+                new THREE.LineBasicMaterial({ color: 0x333333, linewidth: 2 })
+            );
+            line.position.set(0.5, 0.5, 0.5);
+            boundaryGroup.add(line);
+            
+            // Add axes helpers
+            const axesHelper = new THREE.AxesHelper(0.2);
+            scene.add(axesHelper);
+        }
+        
+        // Generate well-distributed points using Poisson disk sampling
+        function generatePoissonPoints(targetCount, minDistance) {
+            console.log(`Generating ~${targetCount} points with min distance ${minDistance}...`);
+            
+            // For now, use a simpler approach that works better
+            const points = [];
+            const maxAttempts = targetCount * 100;
+            let attempts = 0;
+            
+            // Add small margin to keep points away from boundaries
+            const margin = 0.01;
+            
+            while (points.length < targetCount && attempts < maxAttempts) {
+                attempts++;
+                const newPoint = [
+                    margin + Math.random() * (1 - 2 * margin),
+                    margin + Math.random() * (1 - 2 * margin),
+                    margin + Math.random() * (1 - 2 * margin)
+                ];
+                
+                // Check minimum distance to existing points
+                let tooClose = false;
+                for (const point of points) {
+                    const dx = newPoint[0] - point[0];
+                    const dy = newPoint[1] - point[1];
+                    const dz = newPoint[2] - point[2];
+                    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    if (dist < minDistance) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                
+                if (!tooClose) {
+                    points.push(newPoint);
+                }
+            }
+            
+            console.log(`Generated ${points.length} points with minimum distance checking`);
+            return points;
+        }
+        
+        // Legacy function for comparison (keeping for now)
+        function generateWellDistributedPoints(count, minDist) {
+            const points = [];
+            let attempts = 0;
+            const maxAttempts = count * 1000;
+            
+            while (points.length < count && attempts < maxAttempts) {
+                attempts++;
+                const newPoint = [Math.random(), Math.random(), Math.random()];
+                
+                // Check distance to existing points
+                let tooClose = false;
+                for (const point of points) {
+                    const dx = newPoint[0] - point[0];
+                    const dy = newPoint[1] - point[1];
+                    const dz = newPoint[2] - point[2];
+                    const dist = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    if (dist < minDist) {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                
+                if (!tooClose) {
+                    points.push(newPoint);
+                }
+            }
+            
+            return points;
+        }
+        
+        // Helper function to calculate minimum image for periodic boundaries
+        function getMinimumImage(p1, p2) {
+            let dx = p2[0] - p1[0];
+            let dy = p2[1] - p1[1];
+            let dz = p2[2] - p1[2];
+
+            // Apply periodic boundary conditions
+            if (dx > 0.5) dx -= 1.0; else if (dx < -0.5) dx += 1.0;
+            if (dy > 0.5) dy -= 1.0; else if (dy < -0.5) dy += 1.0;
+            if (dz > 0.5) dz -= 1.0; else if (dz < -0.5) dz += 1.0;
+
+            return [p1[0] + dx, p1[1] + dy, p1[2] + dz];
+        }
+
+        // NEW: Simple line functions for better performance (width parameter kept for compatibility)
+        function createDelaunayEdgesThick(computation, width, material) {
+            const delaunayEdgeSet = new Set();
+            const positions = [];
+
+            for (const tet of computation.tetrahedra) {
+                const edges = [
+                    [tet[0], tet[1]], [tet[0], tet[2]], [tet[0], tet[3]], 
+                    [tet[1], tet[2]], [tet[1], tet[3]], [tet[2], tet[3]]
+                ];
+                
+                for (const [a, b] of edges) {
+                    const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+                    if (!delaunayEdgeSet.has(key)) {
+                        delaunayEdgeSet.add(key);
+                        
+                        const p1 = computation.pointsArray[a];
+                        const p2 = computation.pointsArray[b];
+                        
+                        if (computation.isPeriodic) {
+                            const p2_mic = getMinimumImage(p1, p2);
+                            positions.push(p1[0], p1[1], p1[2]);
+                            positions.push(p2_mic[0], p2_mic[1], p2_mic[2]);
+                        } else {
+                            positions.push(p1[0], p1[1], p1[2]);
+                            positions.push(p2[0], p2[1], p2[2]);
+                        }
+                    }
+                }
+            }
+
+            if (positions.length === 0) return;
+
+            const geometry = new LineGeometry();
+            geometry.setPositions(positions);
+
+            const lineMaterial = new LineMaterial({
+                color: material.color.getHex(),
+                linewidth: width,
+                resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+                linecap: 'square',
+                linejoin: 'miter'
+            });
+
+            const line = new Line2(geometry, lineMaterial);
+            line.computeLineDistances();
+            delaunayGroup.add(line);
+        }
+
+        function createVoronoiEdgesThick(computation, width, material) {
+            if (computation.voronoiEdges.length === 0) return;
+            
+            const positions = [];
+            for (const edge of computation.voronoiEdges) {
+                const p1 = edge.start;
+                const p2 = edge.end;
+                
+                if (computation.isPeriodic) {
+                    const p2_mic = getMinimumImage(p1, p2);
+                    positions.push(p1[0], p1[1], p1[2]);
+                    positions.push(p2_mic[0], p2_mic[1], p2_mic[2]);
+                } else {
+                    positions.push(p1[0], p1[1], p1[2]);
+                    positions.push(p2[0], p2[1], p2[2]);
+                }
+            }
+
+            const geometry = new LineGeometry();
+            geometry.setPositions(positions);
+
+            const lineMaterial = new LineMaterial({
+                color: material.color.getHex(),
+                linewidth: width,
+                resolution: new THREE.Vector2(window.innerWidth, window.innerHeight),
+                linecap: 'square',
+                linejoin: 'miter'
+            });
+
+            const line = new Line2(geometry, lineMaterial);
+            line.computeLineDistances();
+            voronoiGroup.add(line);
+        }
+
+        // NEW: MIC-based edge drawing function (Phase 2 implementation)
+        function createDelaunayEdgesMIC(computation) {
+            const points = [];
+            const delaunayEdgeSet = new Set();
+            
+            // Extract unique edges from tetrahedra
+            for (const tet of computation.tetrahedra) {
+                const edges = [
+                    [tet[0], tet[1]], [tet[0], tet[2]], [tet[0], tet[3]], 
+                    [tet[1], tet[2]], [tet[1], tet[3]], [tet[2], tet[3]]
+                ];
+                
+                for (const [a, b] of edges) {
+                    const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+                    if (!delaunayEdgeSet.has(key)) {
+                        delaunayEdgeSet.add(key);
+                        
+                        const p1 = computation.pointsArray[a];
+                        const p2 = computation.pointsArray[b];
+                        
+                        if (computation.isPeriodic) {
+                            const p2_mic = getMinimumImage(p1, p2);
+                            points.push(p1[0], p1[1], p1[2]);
+                            points.push(p2_mic[0], p2_mic[1], p2_mic[2]);
+                        } else {
+                            points.push(p1[0], p1[1], p1[2]);
+                            points.push(p2[0], p2[1], p2[2]);
+                        }
+                    }
+                }
+            }
+            
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+            return geometry;
+        }
+
+        // NEW: Enhanced Voronoi edge drawing with MIC
+        function createVoronoiEdgesMIC(computation) {
+            if (computation.voronoiEdges.length === 0) return null;
+            
+            const points = [];
+            for (const edge of computation.voronoiEdges) {
+                const p1 = edge.start;
+                const p2 = edge.end;
+                
+                if (computation.isPeriodic) {
+                    const p2_mic = getMinimumImage(p1, p2);
+                    points.push(p1[0], p1[1], p1[2]);
+                    points.push(p2_mic[0], p2_mic[1], p2_mic[2]);
+                } else {
+                    points.push(p1[0], p1[1], p1[2]);
+                    points.push(p2[0], p2[1], p2[2]);
+                }
+            }
+            
+            const geometry = new THREE.BufferGeometry();
+            geometry.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+            return geometry;
+        }
+
+        // NEW: Generate stable random colors for Voronoi cells
+        function generateRandomColor(index) {
+            // Use index as seed for consistent colors across redraws
+            const hue = (index * 137.508) % 360; // Golden angle for good distribution
+            const saturation = 70 + (index * 17) % 30; // 70-100% saturation
+            const lightness = 45 + (index * 13) % 20;  // 45-65% lightness
+            
+            // Convert HSL to RGB
+            const h = hue / 360;
+            const s = saturation / 100;
+            const l = lightness / 100;
+            
+            const hue2rgb = (p, q, t) => {
+                if (t < 0) t += 1;
+                if (t > 1) t -= 1;
+                if (t < 1/6) return p + (q - p) * 6 * t;
+                if (t < 1/2) return q;
+                if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+                return p;
+            };
+            
+            let r, g, b;
+            if (s === 0) {
+                r = g = b = l;
+            } else {
+                const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+                const p = 2 * l - q;
+                r = hue2rgb(p, q, h + 1/3);
+                g = hue2rgb(p, q, h);
+                b = hue2rgb(p, q, h - 1/3);
+            }
+            
+            return new THREE.Color(r, g, b);
+        }
+
+        // NEW: Ghost Cell Tiling (Phase 3 implementation)
+        function createGhostCellTiling() {
+            ghostCellsGroup.children.forEach(child => {
+                if (child.isGroup) {
+                    child.children.forEach(c => {
+                        if (c.geometry) c.geometry.dispose();
+                        if (c.material) c.material.dispose();
+                    });
+                }
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            ghostCellsGroup.clear();
+            
+            if (!computation || !document.getElementById('showGhostCells').checked) {
+                return;
+            }
+            
+            console.log("Creating ghost cell tiling...");
+            
+            // Define the 26 neighboring cell positions (excluding center at [0,0,0])
+            const ghostOffsets = [];
+            for (let x = -1; x <= 1; x++) {
+                for (let y = -1; y <= 1; y++) {
+                    for (let z = -1; z <= 1; z++) {
+                        if (x !== 0 || y !== 0 || z !== 0) { // Skip center cell
+                            ghostOffsets.push([x, y, z]);
+                        }
+                    }
+                }
+            }
+            
+            // Semi-transparent materials for ghost cells
+            const delaunayEdgeColorHex = document.getElementById('delaunayEdgeColor').value;
+            const delaunayEdgeColorInt = parseInt(delaunayEdgeColorHex.substring(1), 16);
+            const ghostDelaunayMaterial = new THREE.LineBasicMaterial({ 
+                color: delaunayEdgeColorInt, 
+                opacity: 0.3, 
+                transparent: true 
+            });
+            
+            const voronoiEdgeColorHex = document.getElementById('voronoiEdgeColor').value;
+            const voronoiEdgeColorInt = parseInt(voronoiEdgeColorHex.substring(1), 16);
+            const ghostVoronoiMaterial = new THREE.LineBasicMaterial({ 
+                color: voronoiEdgeColorInt, 
+                opacity: 0.2, 
+                transparent: true
+            });
+            
+            const vertexColorHex = document.getElementById('vertexColor').value;
+            const vertexColorInt = parseInt(vertexColorHex.substring(1), 16);
+            const ghostVertexMaterial = new THREE.MeshPhongMaterial({ 
+                color: vertexColorInt, 
+                opacity: 0.4, 
+                transparent: true 
+            });
+            
+            // Create ghost geometries
+            const delaunayGeometry = createDelaunayEdgesMIC(computation);
+            const voronoiGeometry = createVoronoiEdgesMIC(computation);
+            
+            // Create ghost cells for each offset
+            for (const [offsetX, offsetY, offsetZ] of ghostOffsets) {
+                const ghostGroup = new THREE.Group();
+                ghostGroup.position.set(offsetX, offsetY, offsetZ);
+                
+                // Add Delaunay edges
+                if (delaunayGeometry && document.getElementById('showDelaunay').checked) {
+                    const ghostDelaunayLines = new THREE.LineSegments(
+                        delaunayGeometry.clone(), 
+                        ghostDelaunayMaterial
+                    );
+                    ghostGroup.add(ghostDelaunayLines);
+                }
+                
+                // Add Voronoi edges
+                if (voronoiGeometry && document.getElementById('showVoronoi').checked) {
+                    const ghostVoronoiLines = new THREE.LineSegments(
+                        voronoiGeometry.clone(), 
+                        ghostVoronoiMaterial
+                    );
+                    ghostGroup.add(ghostVoronoiLines);
+                }
+                
+                // Add Voronoi faces with same random coloring as main cell
+                if (document.getElementById('showVoronoiFaces').checked && computation.tetrahedra.length > 0) {
+                    const useRandomColors = document.getElementById('randomVoronoiColors').checked;
+                    const opacity = parseFloat(document.getElementById('voronoiFaceOpacity').value) * 0.3; // More transparent for ghost
+                    
+                    // Create ghost Voronoi cells
+                    const cells = new Map();
+                    computation.tetrahedra.forEach((tet, index) => {
+                        const barycenter = computation.barycenters[index];
+                        if (!barycenter) return;
+
+                        tet.forEach(vertexIndex => {
+                            if (!cells.has(vertexIndex)) {
+                                cells.set(vertexIndex, []);
+                            }
+                            cells.get(vertexIndex).push(new THREE.Vector3(...barycenter));
+                        });
+                    });
+
+                    cells.forEach((cellVertices, vertexIndex) => {
+                        if (cellVertices.length < 4) return;
+
+                        const geometry = new ConvexGeometry(cellVertices);
+                        
+                        let material;
+                        if (useRandomColors) {
+                            const randomColor = generateRandomColor(vertexIndex);
+                            material = new THREE.MeshPhongMaterial({
+                                color: randomColor,
+                                opacity: opacity,
+                                transparent: true,
+                                side: THREE.DoubleSide,
+                                depthWrite: false
+                            });
+                        } else {
+                            const voronoiFaceColorHex = document.getElementById('voronoiFaceColor').value;
+                            const voronoiFaceColorInt = parseInt(voronoiFaceColorHex.substring(1), 16);
+                            material = new THREE.MeshPhongMaterial({
+                                color: voronoiFaceColorInt,
+                                opacity: opacity,
+                                transparent: true,
+                                side: THREE.DoubleSide,
+                                depthWrite: false
+                            });
+                        }
+                        
+                        const mesh = new THREE.Mesh(geometry, material);
+                        ghostGroup.add(mesh);
+                    });
+                }
+                
+                // Add vertices
+                if (document.getElementById('showVertices').checked) {
+                    const vertexSize = parseFloat(document.getElementById('delaunaySize').value);
+                    const sphereGeometry = new THREE.SphereGeometry(vertexSize, 8, 8);
+                    
+                    for (const point of computation.pointsArray) {
+                        const sphere = new THREE.Mesh(sphereGeometry, ghostVertexMaterial);
+                        sphere.position.set(point[0], point[1], point[2]);
+                        ghostGroup.add(sphere);
+                    }
+                }
+                
+                ghostCellsGroup.add(ghostGroup);
+            }
+            
+            console.log(`Created ${ghostOffsets.length} ghost cells`);
+        }
+
+        // Legacy boundary clipping approach (for comparison)
+        function drawMeshesLegacy(computation, delaunayMaterial, voronoiMaterial) {
+            const delaunayPeriodicMaterial = new THREE.LineBasicMaterial({ 
+                color: delaunayMaterial.color, 
+                opacity: 0.6, 
+                transparent: true 
+            });
+            const voronoiPeriodicMaterial = new THREE.LineBasicMaterial({ 
+                color: voronoiMaterial.color, 
+                opacity: 0.8, 
+                transparent: true 
+            });
+            
+            let periodicEdgeCount = 0;
+            let regularEdgeCount = 0;
+            
+            // --- Draw Delaunay Edges with Legacy Clipping ---
+            const delaunayEdgeSet = new Set();
+            for (const tet of computation.tetrahedra) {
+                const edges = [
+                    [tet[0], tet[1]], [tet[0], tet[2]], [tet[0], tet[3]], 
+                    [tet[1], tet[2]], [tet[1], tet[3]], [tet[2], tet[3]]
+                ];
+                for (const [a, b] of edges) {
+                    const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+                    if (!delaunayEdgeSet.has(key)) {
+                        delaunayEdgeSet.add(key);
+                        const p1 = computation.pointsArray[a];
+                        const p2 = computation.pointsArray[b];
+                        
+                        if (computation.isPeriodic) {
+                            const p2min = getMinimumImage(p1, p2);
+                            const isPeriodic = (p2min[0] !== p2[0] || p2min[1] !== p2[1] || p2min[2] !== p2[2]);
+                            
+                            if (isPeriodic) {
+                                periodicEdgeCount++;
+                                // OLD: Boundary clipping approach
+                                for (let dim = 0; dim < 3; dim++) {
+                                    const diff = p2[dim] - p1[dim];
+                                    if (Math.abs(diff) > 0.5) {
+                                        const t = diff > 0 ? (1.0 - p1[dim]) / diff : (0.0 - p1[dim]) / diff;
+                                        const tClamped = Math.max(0.001, Math.min(0.999, t));
+                                        
+                                        const midPoint = [
+                                            p1[0] + tClamped * (p2[0] - p1[0]),
+                                            p1[1] + tClamped * (p2[1] - p1[1]),
+                                            p1[2] + tClamped * (p2[2] - p1[2])
+                                        ];
+                                        midPoint[dim] = diff > 0 ? 0.999 : 0.001;
+                                        
+                                        // Draw first segment to boundary
+                                        const geom1 = new THREE.BufferGeometry().setFromPoints([
+                                            new THREE.Vector3(...p1),
+                                            new THREE.Vector3(...midPoint)
+                                        ]);
+                                        delaunayGroup.add(new THREE.Line(geom1, delaunayPeriodicMaterial));
+                                        
+                                        // Draw second segment from opposite boundary
+                                        const oppositePoint = [...midPoint];
+                                        oppositePoint[dim] = diff > 0 ? 0.001 : 0.999;
+                                        const geom2 = new THREE.BufferGeometry().setFromPoints([
+                                            new THREE.Vector3(...oppositePoint),
+                                            new THREE.Vector3(...p2)
+                                        ]);
+                                        delaunayGroup.add(new THREE.Line(geom2, delaunayPeriodicMaterial));
+                                        break;
+                                    }
+                                }
+                            } else {
+                                regularEdgeCount++;
+                                const lineGeom = new THREE.BufferGeometry().setFromPoints([
+                                    new THREE.Vector3(...p1), new THREE.Vector3(...p2)
+                                ]);
+                                delaunayGroup.add(new THREE.Line(lineGeom, delaunayMaterial));
+                            }
+                        } else {
+                            const lineGeom = new THREE.BufferGeometry().setFromPoints([
+                                new THREE.Vector3(...p1), new THREE.Vector3(...p2)
+                            ]);
+                            delaunayGroup.add(new THREE.Line(lineGeom, delaunayMaterial));
+                        }
+                    }
+                }
+            }
+            
+            // --- Draw Voronoi Edges with Legacy Clipping ---
+            for (const edge of computation.voronoiEdges) {
+                const p1 = edge.start;
+                const p2 = edge.end;
+                
+                if (computation.isPeriodic) {
+                    const p2min = getMinimumImage(p1, p2);
+                    const isPeriodic = (p2min[0] !== p2[0] || p2min[1] !== p2[1] || p2min[2] !== p2[2]);
+                    
+                    if (isPeriodic) {
+                        for (let dim = 0; dim < 3; dim++) {
+                            const diff = p2[dim] - p1[dim];
+                            if (Math.abs(diff) > 0.5) {
+                                const t = diff > 0 ? (1.0 - p1[dim]) / diff : (0.0 - p1[dim]) / diff;
+                                const tClamped = Math.max(0.001, Math.min(0.999, t));
+                                
+                                const midPoint = [
+                                    p1[0] + tClamped * (p2[0] - p1[0]),
+                                    p1[1] + tClamped * (p2[1] - p1[1]),
+                                    p1[2] + tClamped * (p2[2] - p1[2])
+                                ];
+                                midPoint[dim] = diff > 0 ? 0.999 : 0.001;
+                                
+                                const geom1 = new THREE.BufferGeometry().setFromPoints([
+                                    new THREE.Vector3(...p1),
+                                    new THREE.Vector3(...midPoint)
+                                ]);
+                                voronoiGroup.add(new THREE.Line(geom1, voronoiPeriodicMaterial));
+                                
+                                const oppositePoint = [...midPoint];
+                                oppositePoint[dim] = diff > 0 ? 0.001 : 0.999;
+                                const geom2 = new THREE.BufferGeometry().setFromPoints([
+                                    new THREE.Vector3(...oppositePoint),
+                                    new THREE.Vector3(...p2)
+                                ]);
+                                voronoiGroup.add(new THREE.Line(geom2, voronoiPeriodicMaterial));
+                                break;
+                            }
+                        }
+                    } else {
+                        const lineGeom = new THREE.BufferGeometry().setFromPoints([
+                            new THREE.Vector3(...p1), new THREE.Vector3(...p2)
+                        ]);
+                        voronoiGroup.add(new THREE.Line(lineGeom, voronoiMaterial));
+                    }
+                } else {
+                    const lineGeom = new THREE.BufferGeometry().setFromPoints([
+                        new THREE.Vector3(...p1), new THREE.Vector3(...p2)
+                    ]);
+                    voronoiGroup.add(new THREE.Line(lineGeom, voronoiMaterial));
+                }
+            }
+            
+            console.log(`Legacy: Drew ${periodicEdgeCount} periodic edges (clipped), ${regularEdgeCount} regular edges`);
+        }
+
+        // Visualize vertices
+        function drawVertices(computation) {
+            // Dispose of old geometries and materials
+            verticesGroup.children.forEach(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            verticesGroup.clear();
+            
+            const vertexSize = parseFloat(document.getElementById('delaunaySize').value);
+            const vertexColorHex = document.getElementById('vertexColor').value;
+            const vertexColorInt = parseInt(vertexColorHex.substring(1), 16);
+            
+            const geometry = new THREE.SphereGeometry(vertexSize, 16, 16);
+            const material = new THREE.MeshPhongMaterial({ color: vertexColorInt });
+            
+            for (const point of computation.pointsArray) {
+                const sphere = new THREE.Mesh(geometry, material);
+                sphere.position.set(point[0], point[1], point[2]);
+                verticesGroup.add(sphere);
+            }
+        }
+        
+        // Visualize Delaunay edges
+        function drawDelaunay(computation) {
+            delaunayGroup.clear();
+            
+            if (computation.tetrahedra.length === 0) return;
+            
+            const edgeSet = new Set();
+            const material = new THREE.LineBasicMaterial({ color: 0x0066ff });
+            const periodicMaterial = new THREE.LineBasicMaterial({ 
+                color: 0x0099ff
+            });
+            
+            // Extract unique edges from tetrahedra
+            for (const tet of computation.tetrahedra) {
+                const edges = [
+                    [tet[0], tet[1]], [tet[0], tet[2]], [tet[0], tet[3]],
+                    [tet[1], tet[2]], [tet[1], tet[3]], [tet[2], tet[3]]
+                ];
+                
+                for (const [a, b] of edges) {
+                    const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+                    if (!edgeSet.has(key)) {
+                        edgeSet.add(key);
+                        
+                        // Get vertex positions
+                        const p1 = computation.pointsArray[a];
+                        const p2 = computation.pointsArray[b];
+                        
+                        // Check if edge crosses periodic boundary
+                        const isPeriodic = computation._isPeriodicEdge(p1, p2);
+                        
+                        const geometry = new THREE.BufferGeometry();
+                        const positions = new Float32Array([
+                            p1[0], p1[1], p1[2],
+                            p2[0], p2[1], p2[2]
+                        ]);
+                        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                        
+                        const line = new THREE.Line(
+                            geometry, 
+                            isPeriodic ? periodicMaterial : material
+                        );
+                        delaunayGroup.add(line);
+                    }
+                }
+            }
+        }
+        
+        // Visualize Voronoi edges
+        function drawVoronoi(computation) {
+            voronoiGroup.clear();
+            
+            if (computation.voronoiEdges.length === 0) return;
+            
+            const voronoiColorHex = document.getElementById('voronoiColor').value;
+            const voronoiColorInt = parseInt(voronoiColorHex.substring(1), 16);
+            
+            const material = new THREE.LineBasicMaterial({ 
+                color: voronoiColorInt
+            });
+            const periodicMaterial = new THREE.LineBasicMaterial({ 
+                color: voronoiColorInt,
+                opacity: 0.8,
+                transparent: true
+            });
+            
+            for (const edge of computation.voronoiEdges) {
+                const geometry = new THREE.BufferGeometry();
+                const positions = new Float32Array([
+                    edge.start[0], edge.start[1], edge.start[2],
+                    edge.end[0], edge.end[1], edge.end[2]
+                ]);
+                geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+                
+                const line = new THREE.Line(
+                    geometry, 
+                    edge.isPeriodic ? periodicMaterial : material
+                );
+                voronoiGroup.add(line);
+            }
+            
+            // Also draw the barycenters as small spheres
+            const voronoiVertexSize = parseFloat(document.getElementById('voronoiSize').value);
+            const sphereGeometry = new THREE.SphereGeometry(voronoiVertexSize, 8, 8);
+            const sphereMaterial = new THREE.MeshPhongMaterial({ 
+                color: voronoiColorInt,
+                emissive: voronoiColorInt,
+                emissiveIntensity: 0.3
+            });
+            
+            for (const center of computation.barycenters) {
+                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                sphere.position.set(center[0], center[1], center[2]);
+                voronoiGroup.add(sphere);
+            }
+        }
+        
+        // Draw Voronoi faces with optional random colors and MIC for periodic boundaries
+        function drawVoronoiFaces(computation) {
+            voronoiFacesGroup.children.forEach(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            voronoiFacesGroup.clear();
+            
+            if (!computation.tetrahedra.length || !computation.barycenters.length) return;
+            
+            const useRandomColors = document.getElementById('randomVoronoiColors').checked;
+            const voronoiFaceColorHex = document.getElementById('voronoiFaceColor').value;
+            const voronoiFaceColorInt = parseInt(voronoiFaceColorHex.substring(1), 16);
+            const opacity = parseFloat(document.getElementById('voronoiFaceOpacity').value);
+            
+            // Default material for non-random mode
+            const defaultMaterial = new THREE.MeshPhongMaterial({
+                color: voronoiFaceColorInt,
+                opacity: opacity,
+                transparent: true,
+                side: THREE.DoubleSide,
+                depthWrite: false // Important for transparent objects
+            });
+            
+            // Map each original vertex to the barycenters of tetrahedra that contain it
+            const cells = new Map();
+            computation.tetrahedra.forEach((tet, index) => {
+                const barycenter = computation.barycenters[index];
+                if (!barycenter) return;
+
+                tet.forEach(vertexIndex => {
+                    if (!cells.has(vertexIndex)) {
+                        cells.set(vertexIndex, []);
+                    }
+                    cells.get(vertexIndex).push(barycenter); // Store as array, not THREE.Vector3 yet
+                });
+            });
+
+            // For each cell, compute the convex hull with MIC correction for periodic boundaries
+            let cellIndex = 0;
+            cells.forEach((cellBarycenters, vertexIndex) => {
+                if (cellBarycenters.length < 4) return; // Need at least 4 points for a 3D shape
+
+                let correctedVertices;
+                
+                if (computation.isPeriodic && cellBarycenters.length > 0) {
+                    // Apply MIC: Use first barycenter as reference, correct others to same periodic image
+                    const reference = cellBarycenters[0];
+                    correctedVertices = cellBarycenters.map(barycenter => {
+                        if (barycenter === reference) {
+                            return new THREE.Vector3(...reference);
+                        }
+                        
+                        // Apply MIC to bring barycenter to same periodic image as reference
+                        const corrected = getMinimumImage(reference, barycenter);
+                        return new THREE.Vector3(...corrected);
+                    });
+                } else {
+                    // Non-periodic: use barycenters as-is
+                    correctedVertices = cellBarycenters.map(barycenter => 
+                        new THREE.Vector3(...barycenter)
+                    );
+                }
+
+                try {
+                    // Create a convex geometry from the corrected vertices of the Voronoi cell
+                    const geometry = new ConvexGeometry(correctedVertices);
+                    
+                    // Choose material based on random color setting
+                    let material;
+                    if (useRandomColors) {
+                        const randomColor = generateRandomColor(vertexIndex);
+                        material = new THREE.MeshPhongMaterial({
+                            color: randomColor,
+                            opacity: opacity,
+                            transparent: true,
+                            side: THREE.DoubleSide,
+                            depthWrite: false
+                        });
+                    } else {
+                        material = defaultMaterial;
+                    }
+                    
+                    const mesh = new THREE.Mesh(geometry, material);
+                    voronoiFacesGroup.add(mesh);
+                    cellIndex++;
+                } catch (error) {
+                    // Skip cells that can't form valid convex geometry
+                    console.warn(`Skipped Voronoi cell ${vertexIndex}: ${error.message}`);
+                }
+            });
+            
+            console.log(`Drew ${cellIndex} Voronoi cells ${useRandomColors ? 'with random colors' : 'with uniform color'} ${computation.isPeriodic ? '(MIC corrected)' : ''}`);
+        }
+        
+        // NEW: Unified mesh drawing function with MIC toggle
+        function drawMeshes(computation) {
+            // Dispose of old geometries and materials to prevent memory leaks
+            delaunayGroup.children.forEach(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            voronoiGroup.children.forEach(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            voronoiFacesGroup.children.forEach(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+
+            delaunayGroup.clear();
+            voronoiGroup.clear();
+            voronoiFacesGroup.clear();
+
+            const useMIC = document.getElementById('useMIC').checked;
+            
+            // Toggle UI based on MIC mode
+            document.getElementById('delaunayEdgeWidth').disabled = !useMIC;
+            document.getElementById('voronoiEdgeWidth').disabled = !useMIC;
+
+            if (useMIC) {
+                // --- Draw using Thick Line (MIC) mode ---
+                const delaunayEdgeColorHex = document.getElementById('delaunayEdgeColor').value;
+                const delaunayEdgeColorInt = parseInt(delaunayEdgeColorHex.substring(1), 16);
+                const delaunayEdgeWidth = parseFloat(document.getElementById('delaunayEdgeWidth').value);
+                const delaunayMaterial = new THREE.LineBasicMaterial({ color: delaunayEdgeColorInt });
+                createDelaunayEdgesThick(computation, delaunayEdgeWidth, delaunayMaterial);
+
+                const voronoiEdgeColorHex = document.getElementById('voronoiEdgeColor').value;
+                const voronoiEdgeColorInt = parseInt(voronoiEdgeColorHex.substring(1), 16);
+                const voronoiEdgeWidth = parseFloat(document.getElementById('voronoiEdgeWidth').value);
+                const voronoiMaterial = new THREE.LineBasicMaterial({ color: voronoiEdgeColorInt });
+                createVoronoiEdgesThick(computation, voronoiEdgeWidth, voronoiMaterial);
+
+            } else {
+                // --- Draw using Normal, Thin Line mode ---
+                const delaunayGeom = createDelaunayEdgesMIC(computation);
+                if (delaunayGeom) {
+                    const delaunayMaterial = new THREE.LineBasicMaterial({ color: document.getElementById('delaunayEdgeColor').value });
+                    delaunayGroup.add(new THREE.LineSegments(delaunayGeom, delaunayMaterial));
+                }
+
+                const voronoiGeom = createVoronoiEdgesMIC(computation);
+                if (voronoiGeom) {
+                    const voronoiMaterial = new THREE.LineBasicMaterial({ color: document.getElementById('voronoiEdgeColor').value });
+                    voronoiGroup.add(new THREE.LineSegments(voronoiGeom, voronoiMaterial));
+                }
+            }
+            
+            // Voronoi vertices are drawn in both modes
+            const voronoiVertexSize = parseFloat(document.getElementById('voronoiSize').value);
+            const voronoiVertexColorHex = document.getElementById('voronoiVertexColor').value;
+            const voronoiVertexColorInt = parseInt(voronoiVertexColorHex.substring(1), 16);
+            const sphereGeometry = new THREE.SphereGeometry(voronoiVertexSize, 8, 8);
+            const sphereMaterial = new THREE.MeshPhongMaterial({ 
+                color: voronoiVertexColorInt,
+                emissive: voronoiVertexColorInt,
+                emissiveIntensity: 0.3
+            });
+            
+            for (const center of computation.barycenters) {
+                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                sphere.position.set(center[0], center[1], center[2]);
+                voronoiGroup.add(sphere);
+            }
+        }
+        
+        // Visualize tetrahedra
+        function drawTetrahedra(computation) {
+            tetrahedraGroup.children.forEach(child => {
+                if (child.geometry) child.geometry.dispose();
+                if (child.material) child.material.dispose();
+            });
+            tetrahedraGroup.clear();
+            
+            if (computation.tetrahedra.length === 0) return;
+            
+            const tetraColorHex = document.getElementById('tetraColor').value;
+            const tetraColorInt = parseInt(tetraColorHex.substring(1), 16);
+            const opacity = parseFloat(document.getElementById('tetraOpacity').value);
+            
+            const material = new THREE.MeshPhongMaterial({
+                color: tetraColorInt,
+                opacity: opacity,
+                transparent: true,
+                side: THREE.DoubleSide
+            });
+            
+            for (const tet of computation.tetrahedra) {
+                const vertices = tet.map(i => computation.pointsArray[i]);
+                
+                // Create tetrahedron faces
+                const geometry = new THREE.BufferGeometry();
+                const positions = [];
+                
+                // Face indices for tetrahedron
+                const faces = [
+                    [0, 1, 2], [0, 1, 3], [0, 2, 3], [1, 2, 3]
+                ];
+                
+                for (const face of faces) {
+                    for (const idx of face) {
+                        positions.push(vertices[idx][0], vertices[idx][1], vertices[idx][2]);
+                    }
+                }
+                
+                geometry.setAttribute('position', 
+                    new THREE.BufferAttribute(new Float32Array(positions), 3)
+                );
+                geometry.computeVertexNormals();
+                
+                const mesh = new THREE.Mesh(geometry, material);
+                tetrahedraGroup.add(mesh);
+            }
+        }
+        
+        // Compute Delaunay-Voronoi
+        async function computeDelaunayVoronoi() {
+            if (!Module) return;
+            
+            // Add a small delay for live updates to prevent crashes
+            if (document.getElementById('liveUpdate').checked && parseFloat(document.getElementById('motionSpeed').value) > 0) {
+                await new Promise(resolve => setTimeout(resolve, 33)); // ~30 FPS
+            }
+
+            // Diagnostic check for corrupt input data
+            console.log("--- New Computation Triggered ---");
+            console.log(`Checking ${currentPoints.length} points before sending to WASM.`);
+            let outliersFound = 0;
+            for (const p of currentPoints) {
+                if (!p || p.length !== 3 || p[0] < 0 || p[0] > 1 || p[1] < 0 || p[1] > 1 || p[2] < 0 || p[2] > 1) {
+                    console.error("🔴 OUTLIER DETECTED! This point is outside the [0, 1] unit cube and will corrupt the periodic triangulation:", p);
+                    outliersFound++;
+                }
+            }
+            if (outliersFound > 0) {
+                console.error(`Found ${outliersFound} outlier points. Halting computation.`);
+                setStatus(`Error: Found ${outliersFound} outlier points.`, false);
+                return; // Stop execution if data is bad
+            }
+            console.log("✅ Point data is clean. Proceeding with computation...");
+            
+            const isPeriodic = document.getElementById('periodicMode').checked;
+            
+            setStatus('Computing...', false);
+            
+            try {
+                // Create computation instance
+                computation = new DelaunayComputation(currentPoints, isPeriodic);
+                
+                // Run the computation
+                await computation.compute(Module);
+                
+                // Get statistics
+                const stats = computation.getStats();
+                setStatus(`Success! ${stats.numTetrahedra} tetrahedra, ${stats.numVoronoiEdges} Voronoi edges`, true);
+                
+                // Update visualization
+                drawVertices(computation);
+                drawMeshes(computation);
+                drawTetrahedra(computation);
+                drawVoronoiFaces(computation); // Ensure this is called
+                
+                // NEW: Create ghost cell tiling
+                createGhostCellTiling();
+                
+                updateStats();
+                
+            } catch (error) {
+                setStatus(`Error: ${error.message}`, false);
+                console.error(error);
+            }
+        }
+        
+        // Update statistics
+        function updateStats() {
+            if (!computation) return;
+            
+            const stats = computation.getStats();
+            const mode = stats.isPeriodic ? 'Periodic' : 'Non-periodic';
+            const statusMessage = `${mode} | ${stats.numPoints} points | ${stats.numTetrahedra} tetrahedra | ${stats.numVoronoiEdges} Voronoi edges`;
+            setStatus(statusMessage, true);
+        }
+        
+        // Set status message
+        function setStatus(message, isSuccess) {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${isSuccess ? 'success' : 'error'}`;
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            frameCount++;
+
+            const motionSpeed = parseFloat(document.getElementById('motionSpeed').value);
+            if (motionSpeed > 0) {
+                const wander = 0.1 - parseFloat(document.getElementById('motionWander').value);
+
+                // Update point positions based on velocity
+                for (let i = 0; i < currentPoints.length; i++) {
+                    // Update velocity with wander
+                    velocities[i][0] += (Math.random() - 0.5) * wander;
+                    velocities[i][1] += (Math.random() - 0.5) * wander;
+                    velocities[i][2] += (Math.random() - 0.5) * wander;
+
+                    // Normalize and scale velocity
+                    const speed = Math.sqrt(velocities[i][0]**2 + velocities[i][1]**2 + velocities[i][2]**2);
+                    if (speed > 0) {
+                        velocities[i][0] = (velocities[i][0] / speed) * motionSpeed;
+                        velocities[i][1] = (velocities[i][1] / speed) * motionSpeed;
+                        velocities[i][2] = (velocities[i][2] / speed) * motionSpeed;
+                    }
+
+                    // Update position
+                    currentPoints[i][0] += velocities[i][0];
+                    currentPoints[i][1] += velocities[i][1];
+                    currentPoints[i][2] += velocities[i][2];
+
+                    // Wrap points for periodic effect
+                    currentPoints[i][0] = (currentPoints[i][0] + 1) % 1;
+                    currentPoints[i][1] = (currentPoints[i][1] + 1) % 1;
+                    currentPoints[i][2] = (currentPoints[i][2] + 1) % 1;
+                }
+                
+                // If live update is enabled, recompute based on frequency
+                if (document.getElementById('liveUpdate').checked) {
+                    const updateFrequency = parseInt(document.getElementById('updateFrequency').value);
+                    if (frameCount % updateFrequency === 0) {
+                        computeDelaunayVoronoi();
+                    }
+                } else {
+                    drawVertices(computation);
+                }
+            }
+
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        // Initialize everything
+        window.PeriodicDelaunayModule().then(module => {
+            Module = module;
+            setStatus('Module loaded', true);
+            
+            initThree();
+            
+            // Generate initial points
+            const numPoints = parseInt(document.getElementById('numPoints').value);
+            const minDist = parseFloat(document.getElementById('minDistance').value);
+            const usePoisson = document.getElementById('poissonSampling').checked;
+            const points = usePoisson ? 
+                generatePoissonPoints(numPoints, minDist) : 
+                generateWellDistributedPoints(numPoints, minDist);
+            currentPoints = points;
+
+            // Initialize velocities
+            velocities = currentPoints.map(() => [(Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)]);
+            
+            computeDelaunayVoronoi();
+            
+            // Set up event listeners
+            document.getElementById('showVertices').addEventListener('change', (e) => {
+                verticesGroup.visible = e.target.checked;
+            });
+            
+            document.getElementById('showDelaunay').addEventListener('change', (e) => {
+                delaunayGroup.visible = e.target.checked;
+            });
+            
+            document.getElementById('showVoronoi').addEventListener('change', (e) => {
+                voronoiGroup.visible = e.target.checked;
+            });
+            
+            document.getElementById('showTetrahedra').addEventListener('change', (e) => {
+                tetrahedraGroup.visible = e.target.checked;
+            });
+            
+            document.getElementById('showBoundary').addEventListener('change', (e) => {
+                boundaryGroup.visible = e.target.checked;
+            });
+
+            document.getElementById('voronoiFaceColor').addEventListener('change', () => {
+                drawVoronoiFaces(computation);
+                createGhostCellTiling(); // Also update ghost cells
+            });
+            
+            document.getElementById('voronoiFaceOpacity').addEventListener('change', () => {
+                drawVoronoiFaces(computation);
+                createGhostCellTiling(); // Also update ghost cells
+            });
+            
+            document.getElementById('showVoronoiFaces').addEventListener('change', (e) => {
+                voronoiFacesGroup.visible = e.target.checked;
+            });
+            
+            document.getElementById('randomVoronoiColors').addEventListener('change', () => {
+                drawVoronoiFaces(computation);
+                createGhostCellTiling(); // Also update ghost cells
+            });
+            
+            document.getElementById('regenerate').addEventListener('click', () => {
+                const numPoints = parseInt(document.getElementById('numPoints').value);
+                const minDist = parseFloat(document.getElementById('minDistance').value);
+                const usePoisson = document.getElementById('poissonSampling').checked;
+                const points = usePoisson ? 
+                    generatePoissonPoints(numPoints, minDist) : 
+                    generateWellDistributedPoints(numPoints, minDist);
+                currentPoints = points;
+                velocities = currentPoints.map(() => [(Math.random() - 0.5), (Math.random() - 0.5), (Math.random() - 0.5)]);
+                computeDelaunayVoronoi();
+            });
+            
+            document.getElementById('recompute').addEventListener('click', () => {
+                computeDelaunayVoronoi();
+            });
+            
+            document.getElementById('periodicMode').addEventListener('change', () => {
+                computeDelaunayVoronoi();
+            });
+            
+            // Size and color controls
+            document.getElementById('delaunaySize').addEventListener('change', () => {
+                drawVertices(computation);
+            });
+            
+            document.getElementById('vertexColor').addEventListener('change', () => {
+                drawVertices(computation);
+            });
+            
+            document.getElementById('delaunayEdgeColor').addEventListener('change', () => {
+                drawMeshes(computation);
+            });
+            
+            // NEW: Edge width controls
+            document.getElementById('delaunayEdgeWidth').addEventListener('change', () => {
+                drawMeshes(computation);
+            });
+            
+            document.getElementById('voronoiSize').addEventListener('change', () => {
+                drawMeshes(computation);
+            });
+            
+            document.getElementById('voronoiVertexColor').addEventListener('change', () => {
+                drawMeshes(computation);
+            });
+
+            document.getElementById('voronoiEdgeColor').addEventListener('change', () => {
+                drawMeshes(computation);
+            });
+            
+            // NEW: Voronoi edge width control
+            document.getElementById('voronoiEdgeWidth').addEventListener('change', () => {
+                drawMeshes(computation);
+            });
+            
+            document.getElementById('tetraColor').addEventListener('change', () => {
+                drawTetrahedra(computation);
+            });
+            
+            document.getElementById('tetraOpacity').addEventListener('change', () => {
+                drawTetrahedra(computation);
+            });
+            
+            // NEW: Event listeners for MIC and Ghost Cell controls
+            document.getElementById('useMIC').addEventListener('change', () => {
+                drawMeshes(computation);
+                createGhostCellTiling();
+            });
+            
+            document.getElementById('showGhostCells').addEventListener('change', () => {
+                createGhostCellTiling();
+            });
+            
+            // NEW: Random Voronoi colors control
+            document.getElementById('randomVoronoiColors').addEventListener('change', () => {
+                drawVoronoiFaces(computation);
+                createGhostCellTiling(); // Also update ghost cells
+            });
+            
+            // NEW: Control panel toggle
+            document.getElementById('controls-toggle').addEventListener('click', () => {
+                const controls = document.getElementById('controls');
+                const toggle = document.getElementById('controls-toggle');
+                const content = document.getElementById('controls-content');
+                
+                if (controls.classList.contains('hidden')) {
+                    controls.classList.remove('hidden');
+                    content.style.display = 'block';
+                    toggle.textContent = 'hide';
+                    toggle.title = 'Hide Controls';
+                } else {
+                    controls.classList.add('hidden');
+                    content.style.display = 'none';
+                    toggle.textContent = 'show';
+                    toggle.title = 'Show Controls';
+                }
+            });
+            
+            // Background color control
+            document.getElementById('backgroundColor').addEventListener('change', (e) => {
+                scene.background = new THREE.Color(e.target.value);
+            });
+
+            animate();
+            
+        }).catch(err => {
+            console.error('Failed to load module:', err);
+            setStatus('Failed to load module', false);
+        });
+    </script>
+</body>
+</html> 

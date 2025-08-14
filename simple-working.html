@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple Working Periodic Delaunay</title>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/"
+        }
+    }
+    </script>
+    <style>
+        body { margin: 0; font-family: Arial; }
+        #info { position: absolute; top: 10px; left: 10px; background: white; padding: 10px; }
+    </style>
+</head>
+<body>
+    <div id="info">
+        <h3>Simple Grid Test</h3>
+        <button id="togglePeriodic">Toggle Periodic</button>
+        <div id="status"></div>
+    </div>
+    
+    <script src="dist/periodic_delaunay.js"></script>
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        
+        let scene, camera, renderer, controls;
+        let isPeriodic = true;
+        let Module;
+        
+        // Create a simple 3x3x3 grid of points
+        function createGridPoints() {
+            const points = [];
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    for (let k = 0; k < 3; k++) {
+                        points.push([
+                            i / 2.5 + 0.1,  // Offset from boundaries
+                            j / 2.5 + 0.1,
+                            k / 2.5 + 0.1
+                        ]);
+                    }
+                }
+            }
+            return points;
+        }
+        
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0xf0f0f0);
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(2, 2, 2);
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+            
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.target.set(0.5, 0.5, 0.5);
+            
+            // Lighting
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            scene.add(new THREE.DirectionalLight(0xffffff, 0.4));
+            
+            // Boundary box
+            const boxGeometry = new THREE.BoxGeometry(1, 1, 1);
+            const boxEdges = new THREE.EdgesGeometry(boxGeometry);
+            const boxLine = new THREE.LineSegments(boxEdges, new THREE.LineBasicMaterial({ color: 0x000000 }));
+            boxLine.position.set(0.5, 0.5, 0.5);
+            scene.add(boxLine);
+        }
+        
+        async function compute() {
+            // Clear scene except boundary box
+            scene.children = scene.children.filter(child => 
+                child instanceof THREE.LineSegments && child.material.color.getHex() === 0x000000
+            );
+            
+            const points = createGridPoints();
+            const flatPoints = new Float64Array(points.flat());
+            
+            // Draw points
+            const sphereGeometry = new THREE.SphereGeometry(0.02, 16, 16);
+            const sphereMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
+            
+            for (const p of points) {
+                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                sphere.position.set(p[0], p[1], p[2]);
+                scene.add(sphere);
+            }
+            
+            // Compute Delaunay
+            const result = Module.compute_delaunay(flatPoints, points.length, isPeriodic);
+            document.getElementById('status').textContent = 
+                `${isPeriodic ? 'Periodic' : 'Non-periodic'}: ${result.length} tetrahedra`;
+            
+            // Draw edges
+            const edgeSet = new Set();
+            const edgeMaterial = new THREE.LineBasicMaterial({ color: 0x0066ff });
+            
+            for (const tet of result) {
+                const edges = [
+                    [tet[0], tet[1]], [tet[0], tet[2]], [tet[0], tet[3]],
+                    [tet[1], tet[2]], [tet[1], tet[3]], [tet[2], tet[3]]
+                ];
+                
+                for (const [a, b] of edges) {
+                    const key = a < b ? `${a}-${b}` : `${b}-${a}`;
+                    if (!edgeSet.has(key)) {
+                        edgeSet.add(key);
+                        
+                        const p1 = points[a];
+                        const p2 = points[b];
+                        
+                        const geometry = new THREE.BufferGeometry().setFromPoints([
+                            new THREE.Vector3(p1[0], p1[1], p1[2]),
+                            new THREE.Vector3(p2[0], p2[1], p2[2])
+                        ]);
+                        
+                        scene.add(new THREE.Line(geometry, edgeMaterial));
+                    }
+                }
+            }
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        
+        // Initialize
+        window.PeriodicDelaunayModule().then(module => {
+            Module = module;
+            init();
+            compute();
+            animate();
+            
+            document.getElementById('togglePeriodic').addEventListener('click', () => {
+                isPeriodic = !isPeriodic;
+                compute();
+            });
+        });
+    </script>
+</body>
+</html> 

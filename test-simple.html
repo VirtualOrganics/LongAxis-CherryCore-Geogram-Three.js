@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Simple WASM Test</title>
+</head>
+<body>
+    <h1>Simple Periodic Delaunay Test</h1>
+    <pre id="output"></pre>
+    
+    <script src="dist/periodic_delaunay.js"></script>
+    <script>
+        async function test() {
+            const output = document.getElementById('output');
+            
+            try {
+                const Module = await window.PeriodicDelaunayModule();
+                output.textContent += "Module loaded successfully\n\n";
+                
+                // Test 1: Simple 8-point cube
+                output.textContent += "Test 1: 8 points at cube corners\n";
+                const points1 = new Float64Array([
+                    0.0, 0.0, 0.0,
+                    1.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0,
+                    1.0, 1.0, 0.0,
+                    0.0, 0.0, 1.0,
+                    1.0, 0.0, 1.0,
+                    0.0, 1.0, 1.0,
+                    1.0, 1.0, 1.0
+                ]);
+                
+                output.textContent += "Non-periodic:\n";
+                const result1 = Module.compute_delaunay(points1, 8, false);
+                output.textContent += `  Got ${result1.length} tetrahedra\n`;
+                
+                output.textContent += "Periodic:\n";
+                const result2 = Module.compute_delaunay(points1, 8, true);
+                output.textContent += `  Got ${result2.length} tetrahedra\n\n`;
+                
+                // Test 2: Random points in unit cube
+                output.textContent += "Test 2: 20 random points\n";
+                const points2 = new Float64Array(20 * 3);
+                for (let i = 0; i < 20 * 3; i++) {
+                    points2[i] = Math.random();
+                }
+                
+                output.textContent += "Non-periodic:\n";
+                const result3 = Module.compute_delaunay(points2, 20, false);
+                output.textContent += `  Got ${result3.length} tetrahedra\n`;
+                
+                output.textContent += "Periodic:\n";
+                const result4 = Module.compute_delaunay(points2, 20, true);
+                output.textContent += `  Got ${result4.length} tetrahedra\n`;
+                
+                // Check if periodic actually produces different results
+                if (result3.length === result4.length) {
+                    output.textContent += "\n⚠️ WARNING: Periodic and non-periodic give same number of tetrahedra!\n";
+                    output.textContent += "This suggests periodic mode might not be working.\n";
+                }
+                
+            } catch (error) {
+                output.textContent += `\nERROR: ${error.message}\n`;
+                console.error(error);
+            }
+        }
+        
+        test();
+    </script>
+</body>
+</html> 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { DelaunayComputation } from './DelaunayComputation.js';
 
 // Minimal InstancedMesh frontend for ParticleSystem (Cherry Core repulsion only)
 
@@ -7,8 +8,11 @@ let scene, camera, renderer, controls;
 let instancedMesh, dummy;
 let facesMesh, facesGeom, facesMat;
 let axisLines, axisGeom, axisMat;
+let voronoiEdgeLines, voronoiEdgeGeom, voronoiEdgeMat;
 let Module, ps;
 let lastTime = 0;
+let delaunayComputation = null;
+let voronoiFrameCounter = 0;
 
 const NUM_PARTICLES = 300;    // Adjust freely
 const DEFAULT_RADIUS = 0.015; // Visual + physical radius
@@ -25,6 +29,9 @@ const guiState = {
     axisOpacity: 1.0,
     showFaces: false,
     faceOpacity: 0.35,
+    showVoronoiEdges: true,
+    voronoiEdgeOpacity: 0.6,
+    voronoiUpdateFrames: 30, // Update Voronoi mesh every N frames
 };
 
 function initThree() {
@@ -81,6 +88,16 @@ function initThree() {
     axisLines = new THREE.LineSegments(axisGeom, axisMat);
     scene.add(axisLines);
 
+    // Voronoi edge lines (dynamic size based on computation)
+    voronoiEdgeGeom = new THREE.BufferGeometry();
+    voronoiEdgeMat = new THREE.LineBasicMaterial({ 
+        color: 0x00aaff, 
+        transparent: true, 
+        opacity: guiState.voronoiEdgeOpacity 
+    });
+    voronoiEdgeLines = new THREE.LineSegments(voronoiEdgeGeom, voronoiEdgeMat);
+    scene.add(voronoiEdgeLines);
+
     dummy = new THREE.Object3D();
 
     window.addEventListener('resize', onResize);
@@ -131,6 +148,59 @@ function updateInstances(positions, count, axisColors) {
     }
     instancedMesh.instanceMatrix.needsUpdate = true;
     if (axisColors && guiState.colorMode !== 'none' && instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
+}
+
+async function updateVoronoiMesh(positions, count) {
+    if (!guiState.showVoronoiEdges && !guiState.showFaces) return;
+    
+    try {
+        // Convert positions to the format expected by DelaunayComputation
+        const points = [];
+        for (let i = 0; i < count; i++) {
+            points.push([
+                positions[i * 3 + 0],
+                positions[i * 3 + 1], 
+                positions[i * 3 + 2]
+            ]);
+        }
+        
+        // Create new computation or update existing one
+        if (!delaunayComputation) {
+            delaunayComputation = new DelaunayComputation(points, true); // periodic
+        } else {
+            // Update points in existing computation
+            delaunayComputation.pointsArray = points;
+            delaunayComputation.points = new Float64Array(points.flat());
+            delaunayComputation.numPoints = points.length;
+        }
+        
+        // Run the Delaunay-Voronoi computation
+        await delaunayComputation.compute(Module);
+        
+        // Update Voronoi edges visualization
+        if (guiState.showVoronoiEdges && delaunayComputation.voronoiEdges.length > 0) {
+            const edgePositions = [];
+            
+            for (const edge of delaunayComputation.voronoiEdges) {
+                // Add start point
+                edgePositions.push(edge.start[0], edge.start[1], edge.start[2]);
+                // Add end point
+                edgePositions.push(edge.end[0], edge.end[1], edge.end[2]);
+            }
+            
+            voronoiEdgeGeom.setAttribute('position', 
+                new THREE.BufferAttribute(new Float32Array(edgePositions), 3));
+            voronoiEdgeGeom.setDrawRange(0, delaunayComputation.voronoiEdges.length * 2);
+            voronoiEdgeMat.opacity = guiState.voronoiEdgeOpacity;
+            voronoiEdgeLines.visible = true;
+        } else {
+            voronoiEdgeLines.visible = false;
+        }
+        
+    } catch (error) {
+        console.warn('Error updating Voronoi mesh:', error);
+        voronoiEdgeLines.visible = false;
+    }
 }
 
 function animate(nowMs) {
@@ -257,6 +327,13 @@ function animate(nowMs) {
         } else if (facesMesh) {
             facesMesh.visible = false;
         }
+
+        // Update Voronoi mesh using DelaunayComputation (throttled)
+        voronoiFrameCounter++;
+        if (voronoiFrameCounter >= guiState.voronoiUpdateFrames) {
+            voronoiFrameCounter = 0;
+            updateVoronoiMesh(positions, n);
+        }
     }
 
     controls.update();
@@ -294,6 +371,10 @@ async function init() {
         const faceFolder = gui.addFolder('Faces');
         faceFolder.add(guiState, 'showFaces');
         faceFolder.add(guiState, 'faceOpacity', 0.05, 0.8, 0.05);
+        const voronoiFolder = gui.addFolder('Voronoi');
+        voronoiFolder.add(guiState, 'showVoronoiEdges');
+        voronoiFolder.add(guiState, 'voronoiEdgeOpacity', 0.1, 1.0, 0.05);
+        voronoiFolder.add(guiState, 'voronoiUpdateFrames', 5, 120, 1);
     }
 
     requestAnimationFrame(animate);

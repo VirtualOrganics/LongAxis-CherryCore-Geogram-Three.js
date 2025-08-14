@@ -19,6 +19,9 @@ const DEFAULT_RADIUS = 0.015; // Visual + physical radius
 const SEED = 42;
 const guiState = {
     numParticles: 300,        // Number of particles/seeds
+    particleSize: 1.0,        // Particle size multiplier
+    particleColor: '#ffffff', // Particle base color
+    particleOpacity: 1.0,     // Particle opacity
     steeringStrength: 0.20,
     repulsionStrength: 1.00,
     damping: 0.98,
@@ -102,19 +105,26 @@ function createParticleVisualization() {
         axisGeom.dispose();
     }
     
-    // Create new instanced spheres
-    const sphereGeo = new THREE.SphereGeometry(DEFAULT_RADIUS, 12, 12);
-    const sphereMat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 20 });
+    // Create new instanced spheres with dynamic size
+    const radius = DEFAULT_RADIUS * guiState.particleSize;
+    const sphereGeo = new THREE.SphereGeometry(radius, 12, 12);
+    const sphereMat = new THREE.MeshPhongMaterial({ 
+        vertexColors: true, 
+        shininess: 20,
+        transparent: guiState.particleOpacity < 1.0,
+        opacity: guiState.particleOpacity
+    });
     instancedMesh = new THREE.InstancedMesh(sphereGeo, sphereMat, numParticles);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     
     // Per-instance colors
     const colors = new Float32Array(numParticles * 3);
-    // Initialize to mid-grey so particles are visible before axes are computed
+    // Initialize to base color from GUI
+    const baseColor = new THREE.Color(guiState.particleColor);
     for (let i = 0; i < numParticles; i++) {
-        colors[i * 3 + 0] = 0.7;
-        colors[i * 3 + 1] = 0.7;
-        colors[i * 3 + 2] = 0.7;
+        colors[i * 3 + 0] = baseColor.r;
+        colors[i * 3 + 1] = baseColor.g;
+        colors[i * 3 + 2] = baseColor.b;
     }
     instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
     instancedMesh.instanceColor.needsUpdate = true;
@@ -155,6 +165,32 @@ function reinitializeParticleSystem() {
     voronoiFrameCounter = 0;
 }
 
+function updateParticleAppearance() {
+    if (!instancedMesh) return;
+    
+    // Update material properties
+    instancedMesh.material.transparent = guiState.particleOpacity < 1.0;
+    instancedMesh.material.opacity = guiState.particleOpacity;
+    instancedMesh.material.needsUpdate = true;
+    
+    // Update base color if color mode is 'none'
+    if (guiState.colorMode === 'none') {
+        const baseColor = new THREE.Color(guiState.particleColor);
+        const colors = instancedMesh.instanceColor.array;
+        for (let i = 0; i < guiState.numParticles; i++) {
+            colors[i * 3 + 0] = baseColor.r;
+            colors[i * 3 + 1] = baseColor.g;
+            colors[i * 3 + 2] = baseColor.b;
+        }
+        instancedMesh.instanceColor.needsUpdate = true;
+    }
+}
+
+function updateParticleSize() {
+    // For size changes, we need to recreate the geometry
+    createParticleVisualization();
+}
+
 function updateInstances(positions, count, axisColors) {
     for (let i = 0; i < count; i++) {
         const x = positions[i * 3 + 0];
@@ -185,10 +221,14 @@ function updateInstances(positions, count, axisColors) {
                 const b = 1.0 - mag;
                 instancedMesh.setColorAt(i, new THREE.Color(r, g, b));
             }
+        } else {
+            // Use base color when color mode is 'none'
+            const baseColor = new THREE.Color(guiState.particleColor);
+            instancedMesh.setColorAt(i, baseColor);
         }
     }
     instancedMesh.instanceMatrix.needsUpdate = true;
-    if (axisColors && guiState.colorMode !== 'none' && instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
+    if (instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
 }
 
 // Minimum Image Convention for periodic boundaries
@@ -360,8 +400,20 @@ async function init() {
         });
         
         // Particle count control
-        gui.add(guiState, 'numParticles', 50, 2000, 1).name('Seeds/Particles').onChange(() => {
+        gui.add(guiState, 'numParticles', 50, 10000, 1).name('Seeds/Particles').onChange(() => {
             reinitializeParticleSystem();
+        });
+        
+        // Particle appearance controls
+        const particleFolder = gui.addFolder('Particle Appearance');
+        particleFolder.add(guiState, 'particleSize', 0.1, 5.0, 0.1).name('Size').onChange(() => {
+            updateParticleSize();
+        });
+        particleFolder.addColor(guiState, 'particleColor').name('Color').onChange(() => {
+            updateParticleAppearance();
+        });
+        particleFolder.add(guiState, 'particleOpacity', 0.1, 1.0, 0.05).name('Opacity').onChange(() => {
+            updateParticleAppearance();
         });
         
         gui.add(guiState, 'steeringStrength', 0.0, 2.0, 0.01).onChange((v) => ps.setSteeringStrength(v));

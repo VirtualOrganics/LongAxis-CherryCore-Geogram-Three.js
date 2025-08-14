@@ -15,10 +15,10 @@ let delaunayComputation = null;
 let voronoiFrameCounter = 0;
 let isPaused = false;
 
-const NUM_PARTICLES = 300;    // Adjust freely
 const DEFAULT_RADIUS = 0.015; // Visual + physical radius
 const SEED = 42;
 const guiState = {
+    numParticles: 300,        // Number of particles/seeds
     steeringStrength: 0.20,
     repulsionStrength: 1.00,
     damping: 0.98,
@@ -65,29 +65,8 @@ function initThree() {
     dir.position.set(2, 3, 1);
     scene.add(dir);
 
-    // Instanced spheres
-    const sphereGeo = new THREE.SphereGeometry(DEFAULT_RADIUS, 12, 12);
-    const sphereMat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 20 });
-    instancedMesh = new THREE.InstancedMesh(sphereGeo, sphereMat, NUM_PARTICLES);
-    instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    // Per-instance colors
-    const colors = new Float32Array(NUM_PARTICLES * 3);
-    // Initialize to mid-grey so particles are visible before axes are computed
-    for (let i = 0; i < NUM_PARTICLES; i++) {
-        colors[i * 3 + 0] = 0.7;
-        colors[i * 3 + 1] = 0.7;
-        colors[i * 3 + 2] = 0.7;
-    }
-    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
-    instancedMesh.instanceColor.needsUpdate = true;
-    scene.add(instancedMesh);
-
-    // Axis line segments (2 vertices per particle)
-    axisGeom = new THREE.BufferGeometry();
-    axisGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(NUM_PARTICLES * 2 * 3), 3));
-    axisMat = new THREE.LineBasicMaterial({ color: 0xff66ff, transparent: true, opacity: guiState.axisOpacity });
-    axisLines = new THREE.LineSegments(axisGeom, axisMat);
-    scene.add(axisLines);
+    // Instanced spheres (will be recreated when particle count changes)
+    createParticleVisualization();
 
     // Voronoi edge lines (dynamic size based on computation)
     voronoiEdgeGeom = new THREE.BufferGeometry();
@@ -110,9 +89,70 @@ function onResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
+function createParticleVisualization() {
+    const numParticles = guiState.numParticles;
+    
+    // Remove existing meshes if they exist
+    if (instancedMesh) {
+        scene.remove(instancedMesh);
+        instancedMesh.dispose();
+    }
+    if (axisLines) {
+        scene.remove(axisLines);
+        axisGeom.dispose();
+    }
+    
+    // Create new instanced spheres
+    const sphereGeo = new THREE.SphereGeometry(DEFAULT_RADIUS, 12, 12);
+    const sphereMat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 20 });
+    instancedMesh = new THREE.InstancedMesh(sphereGeo, sphereMat, numParticles);
+    instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    
+    // Per-instance colors
+    const colors = new Float32Array(numParticles * 3);
+    // Initialize to mid-grey so particles are visible before axes are computed
+    for (let i = 0; i < numParticles; i++) {
+        colors[i * 3 + 0] = 0.7;
+        colors[i * 3 + 1] = 0.7;
+        colors[i * 3 + 2] = 0.7;
+    }
+    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
+    instancedMesh.instanceColor.needsUpdate = true;
+    scene.add(instancedMesh);
+
+    // Axis line segments (2 vertices per particle)
+    axisGeom = new THREE.BufferGeometry();
+    axisGeom.setAttribute('position', new THREE.BufferAttribute(new Float32Array(numParticles * 2 * 3), 3));
+    axisMat = new THREE.LineBasicMaterial({ color: 0xff66ff, transparent: true, opacity: guiState.axisOpacity });
+    axisLines = new THREE.LineSegments(axisGeom, axisMat);
+    scene.add(axisLines);
+}
+
 function getPositionsView(byteOffset, count) {
     // Create a view into the wasm heap without copying
     return new Float32Array(Module.HEAPF32.buffer, byteOffset, count * 3);
+}
+
+function reinitializeParticleSystem() {
+    if (!ps) return;
+    
+    // Reinitialize the C++ particle system with new count
+    ps.initialize(guiState.numParticles, DEFAULT_RADIUS, SEED);
+    
+    // Apply current parameters
+    ps.setSteeringStrength(guiState.steeringStrength);
+    ps.setRepulsionStrength(guiState.repulsionStrength);
+    ps.setDamping(guiState.damping);
+    ps.setSteeringEveryNFrames(guiState.throttleFrames);
+    ps.setMinSpeed(guiState.minSpeed);
+    ps.setMaxSpeed(guiState.maxSpeed);
+    
+    // Recreate visualization
+    createParticleVisualization();
+    
+    // Reset Voronoi computation
+    delaunayComputation = null;
+    voronoiFrameCounter = 0;
 }
 
 function updateInstances(positions, count, axisColors) {
@@ -299,7 +339,7 @@ async function init() {
 
     Module = await window.PeriodicDelaunayModule();
     ps = new Module.ParticleSystem();
-    ps.initialize(NUM_PARTICLES, DEFAULT_RADIUS, SEED);
+    ps.initialize(guiState.numParticles, DEFAULT_RADIUS, SEED);
 
     // Apply initial params
     ps.setSteeringStrength(guiState.steeringStrength);
@@ -317,6 +357,11 @@ async function init() {
         const pauseState = { paused: false };
         gui.add(pauseState, 'paused').name('Pause').onChange((paused) => {
             isPaused = paused;
+        });
+        
+        // Particle count control
+        gui.add(guiState, 'numParticles', 50, 2000, 1).name('Seeds/Particles').onChange(() => {
+            reinitializeParticleSystem();
         });
         
         gui.add(guiState, 'steeringStrength', 0.0, 2.0, 0.01).onChange((v) => ps.setSteeringStrength(v));

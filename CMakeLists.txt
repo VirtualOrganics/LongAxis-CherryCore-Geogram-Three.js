@@ -17,11 +17,27 @@ set(SRC_FILES
     ${SRC_DIR}/Delaunay_psm.cpp
 )
 
-# Try to locate Eigen first; if not found, fetch it
+# Try to locate Eigen with three strategies, in order of preference:
+# 1) Local vendored copy under third_party/eigen-3.4.0
+# 2) System package via find_package
+# 3) FetchContent from upstream git
 set(EIGEN3_MIN_VERSION 3.3)
-find_package(Eigen3 ${EIGEN3_MIN_VERSION} QUIET NO_MODULE)
 
-if(NOT Eigen3_FOUND)
+# 1) Local vendored Eigen
+set(LOCAL_EIGEN_DIR ${CMAKE_SOURCE_DIR}/third_party/eigen-3.4.0)
+if(EXISTS "${LOCAL_EIGEN_DIR}/Eigen/Core" AND NOT TARGET Eigen3::Eigen)
+    add_library(Eigen3::Eigen INTERFACE IMPORTED)
+    target_include_directories(Eigen3::Eigen INTERFACE ${LOCAL_EIGEN_DIR})
+    set(Eigen3_FOUND TRUE)
+endif()
+
+# 2) System package
+if(NOT TARGET Eigen3::Eigen)
+    find_package(Eigen3 ${EIGEN3_MIN_VERSION} QUIET NO_MODULE)
+endif()
+
+# 3) FetchContent fallback
+if(NOT TARGET Eigen3::Eigen)
     include(FetchContent)
     FetchContent_Declare(
         eigen
@@ -29,7 +45,6 @@ if(NOT Eigen3_FOUND)
         GIT_TAG 3.4.0
     )
     FetchContent_MakeAvailable(eigen)
-    # Fallback include directory for Eigen headers
     if(NOT TARGET Eigen3::Eigen)
         add_library(Eigen3::Eigen INTERFACE IMPORTED)
         target_include_directories(Eigen3::Eigen INTERFACE ${eigen_SOURCE_DIR})

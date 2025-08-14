@@ -53,6 +53,9 @@ public:
     // Raw pointer to radii array (float per particle)
     float* getRadiusBufferPtr();
 
+    // Raw pointer to normalized steering axis per particle (x,y,z per particle)
+    float* getAxisBufferPtr();
+
     // Parameter setters for live tuning from JS
     void setSteeringStrength(float strength) { steeringStrength = strength; }
     void setRepulsionStrength(float strength) { repulsionStrength = strength; }
@@ -91,6 +94,7 @@ private:
     std::vector<Particle> particles;
     std::vector<float> positions; // x,y,z packed for interop
     std::vector<float> radii;     // radii packed for interop
+    std::vector<float> axes;      // normalized steering axis per particle (x,y,z)
 
     // Compute Voronoi-based steering using PCA of each cell's circumcenter cloud
     void applyVoronoiSteering(float dt);

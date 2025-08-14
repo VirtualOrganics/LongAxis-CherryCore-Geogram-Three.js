@@ -51,10 +51,12 @@ void ParticleSystem::initialize(std::size_t numParticles, float defaultRadius, u
     particles.clear();
     positions.clear();
     radii.clear();
+    axes.clear();
 
     particles.resize(numParticles);
     positions.resize(numParticles * 3u);
     radii.resize(numParticles);
+    axes.resize(numParticles * 3u, 0.0f);
 
     std::mt19937 rng(seed);
     std::uniform_real_distribution<float> uni(0.0f, 1.0f);
@@ -159,6 +161,10 @@ float* ParticleSystem::getPositionBufferPtr() {
 
 float* ParticleSystem::getRadiusBufferPtr() {
     return radii.empty() ? nullptr : radii.data();
+}
+
+float* ParticleSystem::getAxisBufferPtr() {
+    return axes.empty() ? nullptr : axes.data();
 }
 
 void ParticleSystem::applyVoronoiSteering(float dt) {
@@ -281,6 +287,11 @@ void ParticleSystem::applyVoronoiSteering(float dt) {
         particles[i].vx += steeringStrength * axis.x() * dt;
         particles[i].vy += steeringStrength * axis.y() * dt;
         particles[i].vz += steeringStrength * axis.z() * dt;
+
+        // Store axis for rendering
+        axes[i * 3u + 0u] = axis.x();
+        axes[i * 3u + 1u] = axis.y();
+        axes[i * 3u + 2u] = axis.z();
     }
 }
 

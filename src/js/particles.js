@@ -42,9 +42,13 @@ function initThree() {
 
     // Instanced spheres
     const sphereGeo = new THREE.SphereGeometry(DEFAULT_RADIUS, 12, 12);
-    const sphereMat = new THREE.MeshNormalMaterial();
+    const sphereMat = new THREE.MeshBasicMaterial({ vertexColors: true });
     instancedMesh = new THREE.InstancedMesh(sphereGeo, sphereMat, NUM_PARTICLES);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    // Per-instance colors
+    const colors = new Float32Array(NUM_PARTICLES * 3);
+    instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
+    instancedMesh.instanceColor.needsUpdate = true;
     scene.add(instancedMesh);
 
     dummy = new THREE.Object3D();
@@ -63,7 +67,7 @@ function getPositionsView(byteOffset, count) {
     return new Float32Array(Module.HEAPF32.buffer, byteOffset, count * 3);
 }
 
-function updateInstances(positions, count) {
+function updateInstances(positions, count, axisColors) {
     for (let i = 0; i < count; i++) {
         const x = positions[i * 3 + 0];
         const y = positions[i * 3 + 1];
@@ -74,8 +78,19 @@ function updateInstances(positions, count) {
         dummy.scale.set(1, 1, 1);
         dummy.updateMatrix();
         instancedMesh.setMatrixAt(i, dummy.matrix);
+        if (axisColors) {
+            // Map axis [-1,1] to RGB [0,1] with simple transform
+            const ax = axisColors[i * 3 + 0];
+            const ay = axisColors[i * 3 + 1];
+            const az = axisColors[i * 3 + 2];
+            const r = 0.5 * (ax + 1.0);
+            const g = 0.5 * (ay + 1.0);
+            const b = 0.5 * (az + 1.0);
+            instancedMesh.instanceColor.setXYZ(i, r, g, b);
+        }
     }
     instancedMesh.instanceMatrix.needsUpdate = true;
+    if (axisColors) instancedMesh.instanceColor.needsUpdate = true;
 }
 
 function animate(nowMs) {
@@ -91,7 +106,12 @@ function animate(nowMs) {
         const n = ps.getParticleCount();
         if (byteOffset && n > 0) {
             const positions = getPositionsView(byteOffset, n);
-            updateInstances(positions, n);
+            let axisColors = null;
+            if (ps.getAxisBufferByteOffset) {
+                const axOff = ps.getAxisBufferByteOffset();
+                if (axOff) axisColors = getPositionsView(axOff, n);
+            }
+            updateInstances(positions, n, axisColors);
         }
     }
 

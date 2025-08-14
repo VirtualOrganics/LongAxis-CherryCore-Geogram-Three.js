@@ -190,6 +190,9 @@ EMSCRIPTEN_BINDINGS(my_module) {
         .function("getRadiusBufferByteOffset", optional_override([](ParticleSystem& self) {
             return static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(self.getRadiusBufferPtr()));
         }))
+        .function("getAxisBufferByteOffset", optional_override([](ParticleSystem& self) {
+            return static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(self.getAxisBufferPtr()));
+        }))
         .function("setSteeringStrength", &ParticleSystem::setSteeringStrength)
         .function("setRepulsionStrength", &ParticleSystem::setRepulsionStrength)
         .function("setDamping", &ParticleSystem::setDamping)

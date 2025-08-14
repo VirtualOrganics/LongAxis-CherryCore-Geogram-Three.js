@@ -56,6 +56,9 @@ public:
     // Raw pointer to normalized steering axis per particle (x,y,z per particle)
     float* getAxisBufferPtr();
 
+    // Raw pointer to axis segment endpoints (6 floats per particle: start_x,y,z, end_x,y,z)
+    float* getAxisSegmentBufferPtr();
+
     // Voronoi face buffers (triangulated)
     // Returns total vertex count in the face buffers
     std::size_t getFaceVertexCount() const { return facePositions.size() / 3u; }
@@ -106,6 +109,7 @@ private:
     std::vector<float> positions; // x,y,z packed for interop
     std::vector<float> radii;     // radii packed for interop
     std::vector<float> axes;      // normalized steering axis per particle (x,y,z)
+    std::vector<float> axisSegments; // axis segment endpoints per particle (6 floats: start_xyz, end_xyz)
 
     // Triangulated Voronoi faces (positions, normals, and owner-particle axis per vertex)
     std::vector<float> facePositions;

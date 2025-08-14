@@ -54,6 +54,7 @@ void ParticleSystem::initialize(std::size_t numParticles, float defaultRadius, u
     positions.clear();
     radii.clear();
     axes.clear();
+    axisSegments.clear();
     facePositions.clear();
     faceNormals.clear();
     faceAxes.clear();
@@ -62,6 +63,7 @@ void ParticleSystem::initialize(std::size_t numParticles, float defaultRadius, u
     positions.resize(numParticles * 3u);
     radii.resize(numParticles);
     axes.resize(numParticles * 3u, 0.0f);
+    axisSegments.resize(numParticles * 6u, 0.0f); // 6 floats per particle (start_xyz, end_xyz)
 
     std::mt19937 rng(seed);
     std::uniform_real_distribution<float> uni(0.0f, 1.0f);
@@ -189,6 +191,10 @@ float* ParticleSystem::getAxisBufferPtr() {
     return axes.empty() ? nullptr : axes.data();
 }
 
+float* ParticleSystem::getAxisSegmentBufferPtr() {
+    return axisSegments.empty() ? nullptr : axisSegments.data();
+}
+
 float* ParticleSystem::getFacePositionBufferPtr() { return facePositions.empty() ? nullptr : facePositions.data(); }
 float* ParticleSystem::getFaceNormalBufferPtr() { return faceNormals.empty() ? nullptr : faceNormals.data(); }
 float* ParticleSystem::getFaceAxisBufferPtr() { return faceAxes.empty() ? nullptr : faceAxes.data(); }
@@ -299,25 +305,52 @@ void ParticleSystem::applyVoronoiSteering(float dt) {
         Eigen::Vector3f eigenvalues = solver.eigenvalues();
         Eigen::Matrix3f eigenvectors = solver.eigenvectors();
 
-        // Index of max eigenvalue
+        // Index of max eigenvalue (largest principal component)
         int idx = 0;
         if (eigenvalues[1] > eigenvalues[idx]) idx = 1;
         if (eigenvalues[2] > eigenvalues[idx]) idx = 2;
-        Eigen::Vector3f axis = eigenvectors.col(idx).normalized();
+        
+        float maxEigenvalue = eigenvalues[idx];
+        Eigen::Vector3f principalAxis = eigenvectors.col(idx).normalized();
 
-        // Disambiguate direction by aligning with current velocity
-        Eigen::Vector3f vel(particles[i].vx, particles[i].vy, particles[i].vz);
-        if (vel.dot(axis) < 0.0f) axis = -axis;
+        // Compute axis length from eigenvalue (square root gives standard deviation along axis)
+        float axisLength = std::sqrt(std::max(0.0f, maxEigenvalue));
+        
+        // Determine skewness/asymmetry by checking distribution of points along axis
+        float skewness = 0.0f;
+        for (const auto& c : centers) {
+            Eigen::Vector3f d = c - mean;
+            skewness += d.dot(principalAxis);
+        }
+        skewness /= float(centers.size());
+        
+        // Disambiguate direction: if skewness is negative, flip axis
+        if (skewness < 0.0f) {
+            principalAxis = -principalAxis;
+        }
 
         // Apply steering as acceleration
-        particles[i].vx += steeringStrength * axis.x() * dt;
-        particles[i].vy += steeringStrength * axis.y() * dt;
-        particles[i].vz += steeringStrength * axis.z() * dt;
+        particles[i].vx += steeringStrength * principalAxis.x() * dt;
+        particles[i].vy += steeringStrength * principalAxis.y() * dt;
+        particles[i].vz += steeringStrength * principalAxis.z() * dt;
 
-        // Store axis for rendering
-        axes[i * 3u + 0u] = axis.x();
-        axes[i * 3u + 1u] = axis.y();
-        axes[i * 3u + 2u] = axis.z();
+        // Store normalized axis for rendering (backward compatibility)
+        axes[i * 3u + 0u] = principalAxis.x();
+        axes[i * 3u + 1u] = principalAxis.y();
+        axes[i * 3u + 2u] = principalAxis.z();
+        
+        // Store actual axis segment endpoints for accurate rendering
+        // Segment goes from (center - 0.5*length*axis) to (center + 0.5*length*axis)
+        Eigen::Vector3f halfExtent = 0.5f * axisLength * principalAxis;
+        Eigen::Vector3f startPoint = mean - halfExtent;
+        Eigen::Vector3f endPoint = mean + halfExtent;
+        
+        axisSegments[i * 6u + 0u] = startPoint.x();
+        axisSegments[i * 6u + 1u] = startPoint.y();
+        axisSegments[i * 6u + 2u] = startPoint.z();
+        axisSegments[i * 6u + 3u] = endPoint.x();
+        axisSegments[i * 6u + 4u] = endPoint.y();
+        axisSegments[i * 6u + 5u] = endPoint.z();
     }
 
     // Optional: very lightweight face triangulation per particle

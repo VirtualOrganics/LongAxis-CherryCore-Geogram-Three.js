@@ -22,7 +22,6 @@ const guiState = {
     maxSpeed: 2.00,
     colorMode: 'none', // 'none' | 'axis' | 'speed'
     showAxis: true,
-    axisLength: 0.08,
     axisOpacity: 1.0,
     showFaces: false,
     faceOpacity: 0.35,
@@ -154,27 +153,31 @@ function animate(nowMs) {
             }
             updateInstances(positions, n, axisColors);
 
-            // Update axis lines
-            if (guiState.showAxis && axisColors) {
-                const arr = axisGeom.attributes.position.array;
-                let p = 0;
-                for (let i = 0; i < n; i++) {
-                    const x = positions[i*3+0];
-                    const y = positions[i*3+1];
-                    const z = positions[i*3+2];
-                    const ax = axisColors[i*3+0];
-                    const ay = axisColors[i*3+1];
-                    const az = axisColors[i*3+2];
-                    const ex = x + ax * guiState.axisLength;
-                    const ey = y + ay * guiState.axisLength;
-                    const ez = z + az * guiState.axisLength;
-                    arr[p++] = x; arr[p++] = y; arr[p++] = z;
-                    arr[p++] = ex; arr[p++] = ey; arr[p++] = ez;
+            // Update axis lines using actual segment endpoints from C++
+            if (guiState.showAxis && ps.getAxisSegmentBufferByteOffset) {
+                const segOff = ps.getAxisSegmentBufferByteOffset();
+                if (segOff) {
+                    // axisSegments buffer contains 6 floats per particle: start_x,y,z, end_x,y,z
+                    const segments = new Float32Array(Module.HEAPF32.buffer, segOff, n * 6);
+                    const arr = axisGeom.attributes.position.array;
+                    let p = 0;
+                    for (let i = 0; i < n; i++) {
+                        // Start point
+                        arr[p++] = segments[i*6+0]; // start_x
+                        arr[p++] = segments[i*6+1]; // start_y
+                        arr[p++] = segments[i*6+2]; // start_z
+                        // End point
+                        arr[p++] = segments[i*6+3]; // end_x
+                        arr[p++] = segments[i*6+4]; // end_y
+                        arr[p++] = segments[i*6+5]; // end_z
+                    }
+                    axisGeom.setDrawRange(0, n * 2);
+                    axisGeom.attributes.position.needsUpdate = true;
+                    axisLines.visible = true;
+                    axisMat.opacity = guiState.axisOpacity;
+                } else {
+                    axisLines.visible = false;
                 }
-                axisGeom.setDrawRange(0, n * 2);
-                axisGeom.attributes.position.needsUpdate = true;
-                axisLines.visible = true;
-                axisMat.opacity = guiState.axisOpacity;
             } else if (axisLines) {
                 axisLines.visible = false;
             }
@@ -287,7 +290,6 @@ async function init() {
         gui.add(guiState, 'colorMode', ['none', 'axis', 'speed']);
         const axisFolder = gui.addFolder('Axis');
         axisFolder.add(guiState, 'showAxis');
-        axisFolder.add(guiState, 'axisLength', 0.01, 0.2, 0.005);
         axisFolder.add(guiState, 'axisOpacity', 0.1, 1.0, 0.05);
         const faceFolder = gui.addFolder('Faces');
         faceFolder.add(guiState, 'showFaces');

@@ -193,6 +193,9 @@ EMSCRIPTEN_BINDINGS(my_module) {
         .function("getAxisBufferByteOffset", optional_override([](ParticleSystem& self) {
             return static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(self.getAxisBufferPtr()));
         }))
+        .function("getAxisSegmentBufferByteOffset", optional_override([](ParticleSystem& self) {
+            return static_cast<uintptr_t>(reinterpret_cast<uintptr_t>(self.getAxisSegmentBufferPtr()));
+        }))
         .function("getFaceVertexCount", optional_override([](const ParticleSystem& self) {
             return static_cast<uint32_t>(self.getFaceVertexCount());
         }))

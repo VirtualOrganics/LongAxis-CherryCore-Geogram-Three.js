@@ -9,6 +9,7 @@ let instancedMesh, dummy;
 let facesMesh, facesGeom, facesMat;
 let axisLines, axisGeom, axisMat;
 let voronoiEdgeLines, voronoiEdgeGeom, voronoiEdgeMat;
+let voronoiFacesGroup;
 let Module, ps;
 let lastTime = 0;
 let delaunayComputation = null;
@@ -80,6 +81,10 @@ function initThree() {
     });
     voronoiEdgeLines = new THREE.LineSegments(voronoiEdgeGeom, voronoiEdgeMat);
     scene.add(voronoiEdgeLines);
+    
+    // Initialize Voronoi faces group
+    voronoiFacesGroup = new THREE.Group();
+    scene.add(voronoiFacesGroup);
 
     dummy = new THREE.Object3D();
 
@@ -109,7 +114,7 @@ function createParticleVisualization() {
     const radius = DEFAULT_RADIUS * guiState.particleSize;
     const sphereGeo = new THREE.SphereGeometry(radius, 12, 12);
     const sphereMat = new THREE.MeshPhongMaterial({ 
-        vertexColors: true, 
+        color: 0xffffff, // Base white color, will be modulated by instance colors
         shininess: 20,
         transparent: guiState.particleOpacity < 1.0,
         opacity: guiState.particleOpacity
@@ -310,6 +315,76 @@ async function updateVoronoiMesh(positions, count) {
     }
 }
 
+// Function to render Voronoi faces using DelaunayComputation
+async function updateVoronoiFaces(positions, count) {
+    if (!guiState.showFaces || !delaunayComputation) {
+        if (voronoiFacesGroup) {
+            voronoiFacesGroup.visible = false;
+        }
+        return;
+    }
+
+    // Clear existing faces
+    voronoiFacesGroup.children.forEach(child => {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) child.material.dispose();
+    });
+    voronoiFacesGroup.clear();
+
+    if (!delaunayComputation.tetrahedra.length || !delaunayComputation.barycenters.length) return;
+
+    const faceMaterial = new THREE.MeshPhongMaterial({
+        color: 0x4444ff,
+        opacity: guiState.faceOpacity,
+        transparent: true,
+        side: THREE.DoubleSide,
+        depthWrite: false // Important for transparent objects
+    });
+
+    // Map each original vertex to the barycenters of tetrahedra that contain it
+    const cells = new Map();
+    delaunayComputation.tetrahedra.forEach((tet, index) => {
+        const barycenter = delaunayComputation.barycenters[index];
+        if (!barycenter) return;
+
+        tet.forEach(vertexIndex => {
+            if (!cells.has(vertexIndex)) {
+                cells.set(vertexIndex, []);
+            }
+            cells.get(vertexIndex).push(new THREE.Vector3(...barycenter));
+        });
+    });
+
+    // For each cell, create a simple convex hull approximation
+    cells.forEach((cellVertices, vertexIndex) => {
+        if (cellVertices.length < 4) return; // Need at least 4 points for a tetrahedron
+
+        // Simple triangulation - connect all points to the first vertex (fan triangulation)
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        const indices = [];
+
+        // Add all vertices
+        cellVertices.forEach(v => {
+            vertices.push(v.x, v.y, v.z);
+        });
+
+        // Create triangular faces (simple fan from first vertex)
+        for (let i = 1; i < cellVertices.length - 1; i++) {
+            indices.push(0, i, i + 1);
+        }
+
+        geometry.setFromPoints(cellVertices);
+        geometry.setIndex(indices);
+        geometry.computeVertexNormals();
+
+        const mesh = new THREE.Mesh(geometry, faceMaterial.clone());
+        voronoiFacesGroup.add(mesh);
+    });
+
+    voronoiFacesGroup.visible = true;
+}
+
 function animate(nowMs) {
     requestAnimationFrame(animate);
 
@@ -364,11 +439,12 @@ function animate(nowMs) {
             if (voronoiFrameCounter >= guiState.voronoiUpdateFrames) {
                 voronoiFrameCounter = 0;
                 updateVoronoiMesh(positions, n);
+                // Update faces after edges are computed
+                updateVoronoiFaces(positions, n);
             }
         }
 
-        // TODO: Implement proper Voronoi face rendering using Geogram-Three.js method
-        // The old face triangulation method has been removed for performance
+        // Hide old face mesh (replaced with voronoiFacesGroup)
         if (facesMesh) {
             facesMesh.visible = false;
         }

@@ -78,10 +78,16 @@ private:
     // Simulation parameters (tuned later for aesthetics/performance)
     float repulsionStrength;   // Scales the soft contact force magnitude
     float damping;             // Simple velocity damping per second (e.g., 0.98 -> mild)
+    float steeringStrength;    // Long-axis steering gain
+    int steeringEveryNFrames;  // Throttle expensive Voronoi/PCA
+    int frameCounter;          // Internal frame counter
 
     std::vector<Particle> particles;
     std::vector<float> positions; // x,y,z packed for interop
     std::vector<float> radii;     // radii packed for interop
+
+    // Compute Voronoi-based steering using PCA of each cell's circumcenter cloud
+    void applyVoronoiSteering(float dt);
 };
 
 

@@ -18,8 +18,9 @@ cd src/cpp
 # Compile with Emscripten
 em++ --bind -o ../../dist/periodic_delaunay.js \
     periodic_delaunay.cpp Delaunay_psm.cpp ParticleSystem.cpp \
-    -I. \
+    -I. -I../../third_party/eigen-3.4.0 \
     -s ALLOW_MEMORY_GROWTH=1 \
+    -s EXPORTED_RUNTIME_METHODS='["HEAPF32"]' \
     -s MODULARIZE=1 \
     -s EXPORT_NAME="PeriodicDelaunayModule" \
     -s ASSERTIONS=1 \

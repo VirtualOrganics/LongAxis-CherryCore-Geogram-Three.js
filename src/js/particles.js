@@ -20,6 +20,8 @@ const guiState = {
     minSpeed: 0.00,
     maxSpeed: 2.00,
     colorMode: 'axis',
+    showFaces: false,
+    faceOpacity: 0.35,
 };
 
 function initThree() {
@@ -142,8 +144,8 @@ function animate(nowMs) {
             updateInstances(positions, n, axisColors);
         }
 
-        // Update Voronoi faces (if any)
-        if (ps.getFaceVertexCount) {
+        // Update Voronoi faces only if enabled
+        if (guiState.showFaces && ps.getFaceVertexCount) {
             const vcount = ps.getFaceVertexCount();
             if (vcount > 0) {
                 const posOff = ps.getFacePositionBufferByteOffset();
@@ -165,7 +167,7 @@ function animate(nowMs) {
                     facesMat = new THREE.ShaderMaterial({
                         transparent: true,
                         depthWrite: false,
-                        uniforms: { uOpacity: { value: 0.35 } },
+                        uniforms: { uOpacity: { value: guiState.faceOpacity } },
                         vertexShader: `
                             attribute vec3 particleAxis;
                             varying vec3 vNormal;
@@ -210,8 +212,11 @@ function animate(nowMs) {
                     facesGeom.attributes.normal.needsUpdate = true;
                     facesGeom.attributes.particleAxis.needsUpdate = true;
                     facesGeom.computeBoundingSphere();
+                    facesMat.uniforms.uOpacity.value = guiState.faceOpacity;
                 }
             }
+        } else if (facesMesh) {
+            facesMesh.visible = false;
         }
     }
 

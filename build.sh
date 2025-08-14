@@ -17,7 +17,7 @@ cd src/cpp
 
 # Compile with Emscripten
 em++ --bind -o ../../dist/periodic_delaunay.js \
-    periodic_delaunay.cpp Delaunay_psm.cpp \
+    periodic_delaunay.cpp Delaunay_psm.cpp ParticleSystem.cpp \
     -I. \
     -s ALLOW_MEMORY_GROWTH=1 \
     -s MODULARIZE=1 \

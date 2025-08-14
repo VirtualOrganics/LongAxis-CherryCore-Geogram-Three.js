@@ -44,9 +44,16 @@ function initThree() {
     boxLine.position.set(0.5, 0.5, 0.5);
     scene.add(boxLine);
 
+    // Basic lights (for non-basic materials)
+    const amb = new THREE.AmbientLight(0xffffff, 0.6);
+    scene.add(amb);
+    const dir = new THREE.DirectionalLight(0xffffff, 0.6);
+    dir.position.set(2, 3, 1);
+    scene.add(dir);
+
     // Instanced spheres
     const sphereGeo = new THREE.SphereGeometry(DEFAULT_RADIUS, 12, 12);
-    const sphereMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xffffff });
+    const sphereMat = new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 20 });
     instancedMesh = new THREE.InstancedMesh(sphereGeo, sphereMat, NUM_PARTICLES);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     // Per-instance colors
@@ -96,7 +103,7 @@ function updateInstances(positions, count, axisColors) {
                 const r = 0.5 * (ax + 1.0);
                 const g = 0.5 * (ay + 1.0);
                 const b = 0.5 * (az + 1.0);
-                instancedMesh.instanceColor.setXYZ(i, r, g, b);
+                instancedMesh.setColorAt(i, new THREE.Color(r, g, b));
             } else {
                 const ax = axisColors[i * 3 + 0];
                 const ay = axisColors[i * 3 + 1];
@@ -105,12 +112,12 @@ function updateInstances(positions, count, axisColors) {
                 const r = mag;
                 const g = 0.2 + 0.8 * (1.0 - mag);
                 const b = 1.0 - mag;
-                instancedMesh.instanceColor.setXYZ(i, r, g, b);
+                instancedMesh.setColorAt(i, new THREE.Color(r, g, b));
             }
         }
     }
     instancedMesh.instanceMatrix.needsUpdate = true;
-    if (axisColors) instancedMesh.instanceColor.needsUpdate = true;
+    if (axisColors && instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
 }
 
 function animate(nowMs) {

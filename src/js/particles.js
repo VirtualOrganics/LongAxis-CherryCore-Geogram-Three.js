@@ -174,7 +174,7 @@ function updateParticleAppearance() {
     instancedMesh.material.needsUpdate = true;
     
     // Update base color if color mode is 'none'
-    if (guiState.colorMode === 'none') {
+    if (guiState.colorMode === 'none' && instancedMesh.instanceColor) {
         const baseColor = new THREE.Color(guiState.particleColor);
         const colors = instancedMesh.instanceColor.array;
         for (let i = 0; i < guiState.numParticles; i++) {
@@ -192,6 +192,9 @@ function updateParticleSize() {
 }
 
 function updateInstances(positions, count, axisColors) {
+    const colors = instancedMesh.instanceColor.array;
+    const baseColor = new THREE.Color(guiState.particleColor);
+    
     for (let i = 0; i < count; i++) {
         const x = positions[i * 3 + 0];
         const y = positions[i * 3 + 1];
@@ -202,33 +205,34 @@ function updateInstances(positions, count, axisColors) {
         dummy.scale.set(1, 1, 1);
         dummy.updateMatrix();
         instancedMesh.setMatrixAt(i, dummy.matrix);
+        
+        // Update colors using the instanceColor array directly
         if (axisColors && guiState.colorMode !== 'none') {
             if (guiState.colorMode === 'axis') {
                 const ax = axisColors[i * 3 + 0];
                 const ay = axisColors[i * 3 + 1];
                 const az = axisColors[i * 3 + 2];
-                const r = 0.5 * (ax + 1.0);
-                const g = 0.5 * (ay + 1.0);
-                const b = 0.5 * (az + 1.0);
-                instancedMesh.setColorAt(i, new THREE.Color(r, g, b));
+                colors[i * 3 + 0] = 0.5 * (ax + 1.0);
+                colors[i * 3 + 1] = 0.5 * (ay + 1.0);
+                colors[i * 3 + 2] = 0.5 * (az + 1.0);
             } else {
                 const ax = axisColors[i * 3 + 0];
                 const ay = axisColors[i * 3 + 1];
                 const az = axisColors[i * 3 + 2];
                 const mag = Math.min(1.0, Math.sqrt(ax*ax + ay*ay + az*az));
-                const r = mag;
-                const g = 0.2 + 0.8 * (1.0 - mag);
-                const b = 1.0 - mag;
-                instancedMesh.setColorAt(i, new THREE.Color(r, g, b));
+                colors[i * 3 + 0] = mag;
+                colors[i * 3 + 1] = 0.2 + 0.8 * (1.0 - mag);
+                colors[i * 3 + 2] = 1.0 - mag;
             }
         } else {
             // Use base color when color mode is 'none'
-            const baseColor = new THREE.Color(guiState.particleColor);
-            instancedMesh.setColorAt(i, baseColor);
+            colors[i * 3 + 0] = baseColor.r;
+            colors[i * 3 + 1] = baseColor.g;
+            colors[i * 3 + 2] = baseColor.b;
         }
     }
     instancedMesh.instanceMatrix.needsUpdate = true;
-    if (instancedMesh.instanceColor) instancedMesh.instanceColor.needsUpdate = true;
+    instancedMesh.instanceColor.needsUpdate = true;
 }
 
 // Minimum Image Convention for periodic boundaries

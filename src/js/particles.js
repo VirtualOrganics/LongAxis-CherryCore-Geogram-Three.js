@@ -27,6 +27,7 @@ function initThree() {
 
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     document.body.appendChild(renderer.domElement);
 
     controls = new OrbitControls(camera, renderer.domElement);
@@ -42,11 +43,17 @@ function initThree() {
 
     // Instanced spheres
     const sphereGeo = new THREE.SphereGeometry(DEFAULT_RADIUS, 12, 12);
-    const sphereMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+    const sphereMat = new THREE.MeshBasicMaterial({ vertexColors: true, color: 0xffffff });
     instancedMesh = new THREE.InstancedMesh(sphereGeo, sphereMat, NUM_PARTICLES);
     instancedMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     // Per-instance colors
     const colors = new Float32Array(NUM_PARTICLES * 3);
+    // Initialize to mid-grey so particles are visible before axes are computed
+    for (let i = 0; i < NUM_PARTICLES; i++) {
+        colors[i * 3 + 0] = 0.7;
+        colors[i * 3 + 1] = 0.7;
+        colors[i * 3 + 2] = 0.7;
+    }
     instancedMesh.instanceColor = new THREE.InstancedBufferAttribute(colors, 3);
     instancedMesh.instanceColor.needsUpdate = true;
     scene.add(instancedMesh);
